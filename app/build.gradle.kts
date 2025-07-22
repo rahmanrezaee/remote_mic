@@ -25,7 +25,10 @@ android {
     buildTypes {
         release {
             isMinifyEnabled = false
-            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro"
+            )
         }
     }
     compileOptions {
@@ -70,7 +73,6 @@ dependencies {
     implementation(libs.androidx.material.icons.extended)
 
 
-
     // Google Nearby Connections API (Core dependency for P2P)
     implementation(libs.play.services.nearby)
 
@@ -84,13 +86,19 @@ dependencies {
     // Activity result APIs for permissions
     implementation(libs.androidx.activity.ktx)
 
+    // OPTION 1: FFmpeg-kit from Appodeal (with smart-exception)
+    implementation("com.arthenica:ffmpeg-kit-min-gpl:6.0-2")
+    implementation("com.arthenica:smart-exception-java:0.2.1")
+
+
+
     // Optional: Camera and Audio dependencies (uncomment when implementing media features)
-     implementation(libs.androidx.camera.core)
-     implementation(libs.androidx.camera.camera2)
-     implementation(libs.androidx.camera.lifecycle)
-     implementation(libs.androidx.camera.video)
-     implementation(libs.androidx.camera.view)
-     implementation(libs.androidx.camera.extensions)
+    implementation(libs.androidx.camera.core)
+    implementation(libs.androidx.camera.camera2)
+    implementation(libs.androidx.camera.lifecycle)
+    implementation(libs.androidx.camera.video)
+    implementation(libs.androidx.camera.view)
+    implementation(libs.androidx.camera.extensions)
 
     // Testing dependencies
     testImplementation(libs.junit)
