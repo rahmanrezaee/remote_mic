@@ -25,7 +25,6 @@ import com.example.remote_mic.managers.AudioManager
 import com.example.remote_mic.managers.ConnectionManager
 import com.example.remote_mic.ui.components.AudioFileCard
 import com.example.remote_mic.utils.openMediaFile
-import java.io.File
 
 @Composable
 fun MicrophoneScreen(
@@ -349,15 +348,13 @@ private fun StatItem(
 
 @Composable
 private fun EnhancedAudioFileCard(
-    audioFile: File,
+    audioFile: java.io.File,
     onPreview: () -> Unit,
     onSend: () -> Unit,
     isSending: Boolean
 ) {
     Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp),
+        modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.95f)
         ),
@@ -368,36 +365,34 @@ private fun EnhancedAudioFileCard(
             modifier = Modifier.padding(24.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            // Title and Icon
             Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
                 Icon(
                     imageVector = Icons.Default.AudioFile,
                     contentDescription = null,
                     modifier = Modifier.size(32.dp),
-                    tint = MaterialTheme.colorScheme.primary
+                    tint = MaterialTheme.colorScheme.tertiary
                 )
                 Text(
                     text = "Audio File Ready",
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.primary
+                    color = MaterialTheme.colorScheme.tertiary
                 )
             }
 
-            // File Info Section
+            // File info
             Card(
-                modifier = Modifier.fillMaxWidth(), // ⬅️ Make it full width
                 colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)
+                    containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.7f)
                 ),
                 shape = RoundedCornerShape(12.dp)
             ) {
                 Column(
-                    modifier = Modifier  .fillMaxWidth() .padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     Text(
                         text = audioFile.name,
@@ -412,14 +407,14 @@ private fun EnhancedAudioFileCard(
                 }
             }
 
-            // Action Buttons (as Column)
+            // Action buttons
             Column(
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 OutlinedButton(
                     onClick = onPreview,
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier.weight(1f)
                 ) {
                     Icon(
                         imageVector = Icons.Default.PlayArrow,
@@ -433,12 +428,11 @@ private fun EnhancedAudioFileCard(
                 Button(
                     onClick = onSend,
                     enabled = !isSending,
-                    modifier = Modifier.fillMaxWidth()
+                    modifier  = Modifier.weight(1f)
                 ) {
                     if (isSending) {
                         CircularProgressIndicator(
-                            modifier = Modifier
-                                .size(18.dp),
+                            modifier = Modifier.size(16.dp),
                             strokeWidth = 2.dp,
                             color = MaterialTheme.colorScheme.onPrimary
                         )
@@ -458,7 +452,6 @@ private fun EnhancedAudioFileCard(
         }
     }
 }
-
 
 @Composable
 private fun ConnectionStatusFooter(appState: AppState) {
