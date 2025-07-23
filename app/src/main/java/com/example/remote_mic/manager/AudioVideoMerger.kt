@@ -15,11 +15,17 @@ class AudioVideoMerger(private val context: Context) {
 
     data class MergeOptions(
         val audioVolume: Float = 1.0f,
-        val videoVolume: Float = 0.5f, // Keep some original video audio
+        val videoVolume: Float = 0.5f,
         val syncOffset: Float = 0.0f, // Audio sync offset in seconds
         val fadeIn: Float = 0.0f,
         val fadeOut: Float = 0.0f,
-        val replaceAudio: Boolean = false // If true, completely replace video audio
+        val replaceAudio: Boolean = false,
+        // New timeline editing options
+        val videoStartTrim: Long = 0L, // Video start trim in milliseconds
+        val videoEndTrim: Long = 0L,   // Video end trim in milliseconds (0 = no trim)
+        val audioStartTrim: Long = 0L, // Audio start trim in milliseconds
+        val audioEndTrim: Long = 0L,   // Audio end trim in milliseconds (0 = no trim)
+        val audioOffset: Long = 0L     // Audio offset in milliseconds
     )
 
     fun mergeAudioVideo(
@@ -32,7 +38,7 @@ class AudioVideoMerger(private val context: Context) {
     ) {
         CoroutineScope(Dispatchers.IO).launch {
             try {
-                Log.d(TAG, "🎬 Starting enhanced merge process...")
+                Log.d(TAG, "🎬 Starting enhanced merge process with timeline editing...")
 
                 // Validate files
                 withContext(Dispatchers.Main) {
@@ -54,13 +60,14 @@ class AudioVideoMerger(private val context: Context) {
                     outputFile.delete()
                 }
 
-                Log.d(TAG, "📁 Files ready for merge:")
+                Log.d(TAG, "📁 Files ready for merge with timeline options:")
                 Log.d(TAG, "Video: ${videoFile.absolutePath} (${videoFile.length()} bytes)")
                 Log.d(TAG, "Audio: ${audioFile.absolutePath} (${audioFile.length()} bytes)")
                 Log.d(TAG, "Output: ${outputFile.absolutePath}")
+                Log.d(TAG, "Timeline options: $options")
 
                 withContext(Dispatchers.Main) {
-                    onProgress?.invoke(15, "Preparing merge...")
+                    onProgress?.invoke(15, "Preparing timeline merge...")
                 }
 
                 // Get media information first
@@ -71,12 +78,12 @@ class AudioVideoMerger(private val context: Context) {
                 Log.d(TAG, "Audio info: $audioInfo")
 
                 withContext(Dispatchers.Main) {
-                    onProgress?.invoke(25, "Processing media...")
+                    onProgress?.invoke(25, "Processing timeline edits...")
                 }
 
-                // Perform merge on main thread for FFmpeg
+                // Perform timeline-aware merge
                 withContext(Dispatchers.Main) {
-                    performEnhancedMerge(
+                    performTimelineAwareMerge(
                         videoFile,
                         audioFile,
                         outputFile,
@@ -87,7 +94,7 @@ class AudioVideoMerger(private val context: Context) {
                 }
 
             } catch (e: Exception) {
-                Log.e(TAG, "❌ Error in merge process", e)
+                Log.e(TAG, "❌ Error in timeline merge process", e)
                 withContext(Dispatchers.Main) { onComplete(null) }
             }
         }
@@ -172,7 +179,7 @@ class AudioVideoMerger(private val context: Context) {
         }
     }
 
-    private fun performEnhancedMerge(
+    private fun performTimelineAwareMerge(
         videoFile: File,
         audioFile: File,
         outputFile: File,
@@ -180,74 +187,150 @@ class AudioVideoMerger(private val context: Context) {
         onProgress: ((Int, String) -> Unit)?,
         onComplete: (File?) -> Unit
     ) {
-        val command = buildEnhancedCommand(videoFile, audioFile, outputFile, options)
+        val command = buildTimelineAwareCommand(videoFile, audioFile, outputFile, options)
 
-        Log.d(TAG, "🎬 Enhanced FFmpeg command: $command")
-        onProgress?.invoke(35, "Merging audio and video...")
+        Log.d(TAG, "🎬 Timeline-aware FFmpeg command: $command")
+        onProgress?.invoke(35, "Merging with timeline edits...")
 
         try {
             FFmpegKit.executeAsync(command) { session ->
                 handleMergeResult(session, outputFile, videoFile, audioFile, options, onProgress, onComplete)
             }
         } catch (e: Exception) {
-            Log.e(TAG, "❌ Exception during FFmpeg execution", e)
+            Log.e(TAG, "❌ Exception during timeline FFmpeg execution", e)
             onComplete(null)
         }
     }
 
-    private fun buildEnhancedCommand(
+    private fun buildTimelineAwareCommand(
         videoFile: File,
         audioFile: File,
         outputFile: File,
         options: MergeOptions
     ): String {
         return buildString {
-            // Input files
+            // Input files with potential seek and duration
             append("-i \"${videoFile.absolutePath}\" ")
             append("-i \"${audioFile.absolutePath}\" ")
 
-            if (options.replaceAudio) {
-                // Simple replacement mode
-                append("-c:v copy ")
-                append("-c:a aac ")
-                append("-b:a 128k ")
-                append("-map 0:v:0 ")
-                append("-map 1:a:0 ")
+            // Build complex filter for timeline editing
+            append("-filter_complex \"")
 
-                if (options.syncOffset != 0.0f) {
-                    append("-itsoffset ${options.syncOffset} ")
+            var filterIndex = 0
+            val filters = mutableListOf<String>()
+
+            // Video processing
+            var videoLabel = "[0:v]"
+
+            // Video trimming
+            if (options.videoStartTrim > 0 || options.videoEndTrim > 0) {
+                val startSeconds = options.videoStartTrim / 1000.0
+                val videoFilter = if (options.videoEndTrim > 0) {
+                    val endSeconds = options.videoEndTrim / 1000.0
+                    val duration = endSeconds - startSeconds
+                    "${videoLabel}trim=start=${startSeconds}:duration=${duration},setpts=PTS-STARTPTS[v${filterIndex}]"
+                } else {
+                    "${videoLabel}trim=start=${startSeconds},setpts=PTS-STARTPTS[v${filterIndex}]"
                 }
-            } else {
-                // Mix both audio tracks
-                append("-c:v copy ")
-                append("-filter_complex \"")
-
-                // Audio mixing with volume controls
-                append("[1:a]volume=${options.audioVolume}")
-
-                if (options.fadeIn > 0) {
-                    append(",afade=t=in:d=${options.fadeIn}")
-                }
-
-                if (options.fadeOut > 0) {
-                    append(",afade=t=out:d=${options.fadeOut}")
-                }
-
-                if (options.syncOffset != 0.0f) {
-                    append(",adelay=${(options.syncOffset * 1000).toInt()}|${(options.syncOffset * 1000).toInt()}")
-                }
-
-                append("[audio_processed];")
-                append("[0:a]volume=${options.videoVolume}[video_audio];")
-                append("[video_audio][audio_processed]amix=inputs=2:duration=shortest")
-                append("\" ")
-
-                append("-c:a aac ")
-                append("-b:a 192k ")
-                append("-map 0:v:0 ")
+                filters.add(videoFilter)
+                videoLabel = "[v${filterIndex}]"
+                filterIndex++
             }
 
-            // Common options
+            // Audio processing
+            var audioLabel = "[1:a]"
+
+            // Audio trimming
+            if (options.audioStartTrim > 0 || options.audioEndTrim > 0) {
+                val startSeconds = options.audioStartTrim / 1000.0
+                val audioFilter = if (options.audioEndTrim > 0) {
+                    val endSeconds = options.audioEndTrim / 1000.0
+                    val duration = endSeconds - startSeconds
+                    "${audioLabel}atrim=start=${startSeconds}:duration=${duration},asetpts=PTS-STARTPTS[a${filterIndex}]"
+                } else {
+                    "${audioLabel}atrim=start=${startSeconds},asetpts=PTS-STARTPTS[a${filterIndex}]"
+                }
+                filters.add(audioFilter)
+                audioLabel = "[a${filterIndex}]"
+                filterIndex++
+            }
+
+            // Audio offset/delay
+            if (options.audioOffset != 0L) {
+                val delayMs = options.audioOffset
+                filters.add("${audioLabel}adelay=${delayMs}|${delayMs}[a${filterIndex}]")
+                audioLabel = "[a${filterIndex}]"
+                filterIndex++
+            }
+
+            // Audio volume adjustment
+            if (options.audioVolume != 1.0f) {
+                filters.add("${audioLabel}volume=${options.audioVolume}[a${filterIndex}]")
+                audioLabel = "[a${filterIndex}]"
+                filterIndex++
+            }
+
+            // Video audio processing (if not replacing)
+            var videoAudioLabel = ""
+            if (!options.replaceAudio) {
+                videoAudioLabel = "[0:a]"
+
+                // Video audio trimming (match video trimming)
+                if (options.videoStartTrim > 0 || options.videoEndTrim > 0) {
+                    val startSeconds = options.videoStartTrim / 1000.0
+                    val videoAudioFilter = if (options.videoEndTrim > 0) {
+                        val endSeconds = options.videoEndTrim / 1000.0
+                        val duration = endSeconds - startSeconds
+                        "${videoAudioLabel}atrim=start=${startSeconds}:duration=${duration},asetpts=PTS-STARTPTS[va${filterIndex}]"
+                    } else {
+                        "${videoAudioLabel}atrim=start=${startSeconds},asetpts=PTS-STARTPTS[va${filterIndex}]"
+                    }
+                    filters.add(videoAudioFilter)
+                    videoAudioLabel = "[va${filterIndex}]"
+                    filterIndex++
+                }
+
+                // Video audio volume
+                if (options.videoVolume != 1.0f) {
+                    filters.add("${videoAudioLabel}volume=${options.videoVolume}[va${filterIndex}]")
+                    videoAudioLabel = "[va${filterIndex}]"
+                    filterIndex++
+                }
+
+                // Mix audio tracks
+                filters.add("${videoAudioLabel}${audioLabel}amix=inputs=2:duration=shortest[aout]")
+            } else {
+                // Just use the processed audio track
+                filters.add("${audioLabel}acopy[aout]")
+            }
+
+            // Apply fade effects if specified
+            if (options.fadeIn > 0 || options.fadeOut > 0) {
+                var fadeLabel = "[aout]"
+                if (options.fadeIn > 0) {
+                    filters.add("${fadeLabel}afade=t=in:d=${options.fadeIn}[af${filterIndex}]")
+                    fadeLabel = "[af${filterIndex}]"
+                    filterIndex++
+                }
+                if (options.fadeOut > 0) {
+                    filters.add("${fadeLabel}afade=t=out:d=${options.fadeOut}[aout]")
+                }
+            }
+
+            // Combine all filters
+            append(filters.joinToString(";"))
+            append("\" ")
+
+            // Map outputs
+            append("-map ${videoLabel} ")
+            append("-map [aout] ")
+
+            // Codec settings
+            append("-c:v copy ")
+            append("-c:a aac ")
+            append("-b:a 192k ")
+
+            // Additional options
             append("-shortest ")
             append("-avoid_negative_ts make_zero ")
             append("-fflags +genpts ")
@@ -269,16 +352,16 @@ class AudioVideoMerger(private val context: Context) {
         val output = session.output
         val logs = session.logsAsString
 
-        Log.d(TAG, "🎬 FFmpeg execution completed")
+        Log.d(TAG, "🎬 Timeline FFmpeg execution completed")
         Log.d(TAG, "Return code: $returnCode")
         Log.d(TAG, "Session state: ${session.state}")
 
         if (ReturnCode.isSuccess(returnCode)) {
             if (outputFile.exists() && outputFile.length() > 0) {
-                Log.d(TAG, "✅ Enhanced merge successful!")
+                Log.d(TAG, "✅ Timeline merge successful!")
                 Log.d(TAG, "Output file: ${outputFile.absolutePath}")
                 Log.d(TAG, "Output size: ${outputFile.length()} bytes")
-                onProgress?.invoke(100, "Merge completed successfully!")
+                onProgress?.invoke(100, "Timeline merge completed successfully!")
 
                 // Brief delay to show completion
                 CoroutineScope(Dispatchers.Main).launch {
@@ -286,31 +369,32 @@ class AudioVideoMerger(private val context: Context) {
                     onComplete(outputFile)
                 }
             } else {
-                Log.e(TAG, "❌ Output file is empty or doesn't exist")
+                Log.e(TAG, "❌ Timeline output file is empty or doesn't exist")
                 Log.e(TAG, "FFmpeg output: $output")
-                onProgress?.invoke(50, "Trying alternative method...")
+                onProgress?.invoke(50, "Trying fallback method...")
 
-                // Try fallback method
-                tryFallbackMerge(videoFile, audioFile, outputFile, onProgress, onComplete)
+                // Try simple fallback method
+                trySimpleFallbackMerge(videoFile, audioFile, outputFile, options, onProgress, onComplete)
             }
         } else {
-            Log.e(TAG, "❌ FFmpeg failed with return code: $returnCode")
+            Log.e(TAG, "❌ Timeline FFmpeg failed with return code: $returnCode")
             Log.e(TAG, "FFmpeg logs: $logs")
-            onProgress?.invoke(50, "Trying alternative method...")
+            onProgress?.invoke(50, "Trying fallback method...")
 
-            // Try fallback method
-            tryFallbackMerge(videoFile, audioFile, outputFile, onProgress, onComplete)
+            // Try simple fallback method
+            trySimpleFallbackMerge(videoFile, audioFile, outputFile, options, onProgress, onComplete)
         }
     }
 
-    private fun tryFallbackMerge(
+    private fun trySimpleFallbackMerge(
         videoFile: File,
         audioFile: File,
         outputFile: File,
+        options: MergeOptions,
         onProgress: ((Int, String) -> Unit)?,
         onComplete: (File?) -> Unit
     ) {
-        Log.d(TAG, "🔄 Trying fallback merge method...")
+        Log.d(TAG, "🔄 Trying simple fallback merge method...")
         onProgress?.invoke(60, "Using fallback method...")
 
         // Delete the failed output file
@@ -318,15 +402,22 @@ class AudioVideoMerger(private val context: Context) {
             outputFile.delete()
         }
 
-        // Simple fallback command
+        // Simple fallback command without timeline features
         val fallbackCommand = buildString {
             append("-i \"${videoFile.absolutePath}\" ")
             append("-i \"${audioFile.absolutePath}\" ")
             append("-c:v copy ")
             append("-c:a aac ")
             append("-b:a 128k ")
-            append("-map 0:v ")
-            append("-map 1:a ")
+
+            if (options.replaceAudio) {
+                append("-map 0:v ")
+                append("-map 1:a ")
+            } else {
+                append("-filter_complex \"[0:a]volume=${options.videoVolume}[va];[1:a]volume=${options.audioVolume}[aa];[va][aa]amix=inputs=2:duration=shortest\" ")
+                append("-map 0:v ")
+            }
+
             append("-shortest ")
             append("-y ")
             append("\"${outputFile.absolutePath}\"")
@@ -374,13 +465,18 @@ class AudioVideoMerger(private val context: Context) {
         )
     }
 
-    // Advanced merge with custom audio mixing
-    fun advancedMerge(
+    // Advanced merge with timeline editing
+    fun timelineEditMerge(
         videoFile: File,
         audioFile: File,
+        videoStartTrim: Long = 0L,
+        videoEndTrim: Long = 0L,
+        audioStartTrim: Long = 0L,
+        audioEndTrim: Long = 0L,
+        audioOffset: Long = 0L,
         audioVolume: Float = 1.0f,
-        keepVideoAudio: Boolean = true,
-        syncOffset: Float = 0.0f,
+        videoVolume: Float = 0.3f,
+        replaceAudio: Boolean = false,
         onProgress: ((Int, String) -> Unit)? = null,
         onComplete: (File?) -> Unit
     ) {
@@ -389,9 +485,13 @@ class AudioVideoMerger(private val context: Context) {
             audioFile = audioFile,
             options = MergeOptions(
                 audioVolume = audioVolume,
-                videoVolume = if (keepVideoAudio) 0.3f else 0.0f,
-                syncOffset = syncOffset,
-                replaceAudio = !keepVideoAudio
+                videoVolume = videoVolume,
+                videoStartTrim = videoStartTrim,
+                videoEndTrim = videoEndTrim,
+                audioStartTrim = audioStartTrim,
+                audioEndTrim = audioEndTrim,
+                audioOffset = audioOffset,
+                replaceAudio = replaceAudio
             ),
             onProgress = onProgress,
             onComplete = onComplete

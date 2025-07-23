@@ -16,6 +16,7 @@ import com.example.remote_mic.managers.CameraManager
 import com.example.remote_mic.managers.ConnectionManager
 import com.example.remote_mic.ui.component.TransferProgressIndicator
 import com.example.remote_mic.ui.screens.*
+import java.io.File
 
 @Composable
 fun RemoteMicApp(
@@ -56,66 +57,66 @@ fun RemoteMicApp(
                 modifier = Modifier.weight(1f),
                 contentAlignment = Alignment.Center
             ) {
-                when {
+//                when {
                     // Show merge screen when requested and files are available
-                    appState.showMergeScreen && canMerge -> {
-                        MergeEditScreen(
-                            videoFile = appState.recordedVideoFile!!,
-                            audioFile = appState.receivedAudioFile!!,
+//                    appState.showMergeScreen && canMerge -> {
+                        VideoEditorScreen(
+                            videoFile = File("/storage/emulated/0/Android/data/com.example.remote_mic/files/video/VID_20250723_110457.mp4"),
+                            audioFile = File("/storage/emulated/0/Android/data/com.example.remote_mic/files/received/received_audio_1753252517058.mp4"),
                             onBackToCamera = {
-                                connectionManager.updateState { copy(showMergeScreen = false) }
+//                                connectionManager.updateState { copy(showMergeScreen = false) }
                             },
-                            onMergeComplete = { mergedFile ->
-                                connectionManager.updateState {
-                                    copy(
-                                        mergedVideoFile = mergedFile,
-                                        showMergeScreen = false
-                                    )
-                                }
+                            onExportComplete = { mergedFile ->
+//                                connectionManager.updateState {
+//                                    copy(
+//                                        mergedVideoFile = mergedFile,
+//                                        showMergeScreen = false
+//                                    )
+//                                }
                             }
                         )
-                    }
-
-                    !appState.isConnected -> {
-                        ConnectionScreen(
-                            appState = appState,
-                            connectionManager = connectionManager,
-                            onHost = { connectionManager.startHosting() },
-                            onSearch = { connectionManager.startSearching() },
-                            onConnect = { device ->
-                                val endpointId = device.split("|")[1]
-                                connectionManager.connectToDevice(endpointId)
-                            }
-                        )
-                    }
-
-                    appState.myRole.isEmpty() -> {
-                        RoleSelectionScreen(
-                            appState = appState,
-                            onSelectRole = { role -> connectionManager.selectRole(role) },
-                            connectionManager = connectionManager
-                        )
-                    }
-
-                    appState.myRole == "camera" -> {
-                        CameraScreen(
-                            appState = appState,
-                            connectionManager = connectionManager,
-                            isRecording = appState.isRecording,
-                            cameraManager = cameraManager,
-                            onStartRecording = { cameraManager.startRecording() },
-                            onStopRecording = { cameraManager.stopRecording() }
-                        )
-                    }
-
-                    appState.myRole == "mic" -> {
-                        MicrophoneScreen(
-                            appState = appState,
-                            audioManager = audioManager,
-                            connectionManager = connectionManager
-                        )
-                    }
-                }
+//                    }
+//
+//                    !appState.isConnected -> {
+//                        ConnectionScreen(
+//                            appState = appState,
+//                            connectionManager = connectionManager,
+//                            onHost = { connectionManager.startHosting() },
+//                            onSearch = { connectionManager.startSearching() },
+//                            onConnect = { device ->
+//                                val endpointId = device.split("|")[1]
+//                                connectionManager.connectToDevice(endpointId)
+//                            }
+//                        )
+//                    }
+//
+//                    appState.myRole.isEmpty() -> {
+//                        RoleSelectionScreen(
+//                            appState = appState,
+//                            onSelectRole = { role -> connectionManager.selectRole(role) },
+//                            connectionManager = connectionManager
+//                        )
+//                    }
+//
+//                    appState.myRole == "camera" -> {
+//                        CameraScreen(
+//                            appState = appState,
+//                            connectionManager = connectionManager,
+//                            isRecording = appState.isRecording,
+//                            cameraManager = cameraManager,
+//                            onStartRecording = { cameraManager.startRecording() },
+//                            onStopRecording = { cameraManager.stopRecording() }
+//                        )
+//                    }
+//
+//                    appState.myRole == "mic" -> {
+//                        MicrophoneScreen(
+//                            appState = appState,
+//                            audioManager = audioManager,
+//                            connectionManager = connectionManager
+//                        )
+//                    }
+//                }
             }
         }
 
