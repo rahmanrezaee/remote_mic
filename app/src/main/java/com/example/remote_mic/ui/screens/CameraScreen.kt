@@ -23,11 +23,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.camera.video.Quality
+import androidx.compose.ui.unit.sp
 import com.example.remote_mic.AppState
 import com.example.remote_mic.managers.CameraManager
 import com.example.remote_mic.managers.ConnectionManager
 import kotlinx.coroutines.delay
-
 @Composable
 fun CameraScreen(
     isRecording: Boolean,
@@ -42,6 +42,10 @@ fun CameraScreen(
     var recordingTime by remember { mutableStateOf("00:00") }
     var showQualitySelector by remember { mutableStateOf(false) }
 
+    // Check if we can show merge button
+    val canShowMergeButton = appState.receivedAudioFile != null &&
+            appState.recordedVideoFile != null
+
     // Setup camera callbacks
     LaunchedEffect(cameraManager) {
         cameraManager.onCameraStatusChanged = { status ->
@@ -49,6 +53,9 @@ fun CameraScreen(
         }
         cameraManager.onRecordingTimeChanged = { time ->
             recordingTime = time
+        }
+        cameraManager.onVideoFileReady = { videoFile ->
+            connectionManager.setVideoFile(videoFile)
         }
     }
 
@@ -104,7 +111,8 @@ fun CameraScreen(
             recordingTime = recordingTime,
             isConnected = appState.isConnected,
             onSettingsClick = { showQualitySelector = true },
-            modifier = Modifier.align(Alignment.TopCenter)
+            modifier = Modifier.align(Alignment.TopCenter),
+            hasReceivedAudio = appState.receivedAudioFile != null
         )
 
         // Enhanced Recording Controls
@@ -113,7 +121,9 @@ fun CameraScreen(
             onStartRecording = onStartRecording,
             onStopRecording = onStopRecording,
             onCameraSwitch = { cameraManager.switchCamera() },
-            onGalleryClick = { /* Open gallery */ },
+            onMergeClick = if (canShowMergeButton) {
+                { connectionManager.updateState { copy(showMergeScreen = true) } }
+            } else null,
             canSwitchCamera = cameraManager.canSwitchCamera(),
             modifier = Modifier.align(Alignment.BottomCenter)
         )
@@ -127,8 +137,6 @@ fun CameraScreen(
             recordingTime = recordingTime
         )
 
-
-
         // Quality Selector Dialog
         if (showQualitySelector) {
             QualitySelector(
@@ -138,6 +146,278 @@ fun CameraScreen(
                     showQualitySelector = false
                 },
                 onDismiss = { showQualitySelector = false }
+            )
+        }
+    }
+}
+
+@Composable
+private fun EnhancedRecordingControls(
+    isRecording: Boolean,
+    onStartRecording: () -> Unit,
+    onStopRecording: () -> Unit,
+    onCameraSwitch: () -> Unit,
+    onMergeClick: (() -> Unit)? = null, // Nullable - only shows when merge is available
+    canSwitchCamera: Boolean,
+    modifier: Modifier = Modifier
+) {
+    Card(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(20.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = Color.Black.copy(alpha = 0.7f)
+        ),
+        shape = RoundedCornerShape(32.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 12.dp)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(28.dp),
+            horizontalArrangement = Arrangement.SpaceEvenly,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // Camera flip button
+            EnhancedControlButton(
+                icon = Icons.Default.Cameraswitch,
+                size = 56.dp,
+                backgroundColor = Color.White.copy(alpha = if (canSwitchCamera) 0.2f else 0.1f),
+                iconColor = Color.White.copy(alpha = if (canSwitchCamera) 1f else 0.5f),
+                enabled = canSwitchCamera && !isRecording,
+                onClick = onCameraSwitch
+            )
+
+            // Main record button with enhanced animation
+            MainRecordButton(
+                isRecording = isRecording,
+                onStartRecording = onStartRecording,
+                onStopRecording = onStopRecording
+            )
+
+            // Merge button (when available) or placeholder
+            if (onMergeClick != null) {
+                // Show merge button when both files are available
+                MergeControlButton(
+                    onClick = onMergeClick,
+                    enabled = !isRecording
+                )
+            } else {
+                // Show disabled placeholder when merge not available
+                EnhancedControlButton(
+                    icon = Icons.Default.MergeType,
+                    size = 56.dp,
+                    backgroundColor = Color.White.copy(alpha = 0.1f),
+                    iconColor = Color.White.copy(alpha = 0.3f),
+                    enabled = false,
+                    onClick = { }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun MergeControlButton(
+    onClick: () -> Unit,
+    enabled: Boolean = true
+) {
+    var isPressed by remember { mutableStateOf(false) }
+
+    val scale by animateFloatAsState(
+        targetValue = if (isPressed) 0.9f else 1f,
+        animationSpec = tween(100),
+        label = "mergeButtonScale"
+    )
+
+    // Pulsing animation to draw attention
+    val infiniteTransition = rememberInfiniteTransition(label = "mergePulse")
+    val pulseAlpha by infiniteTransition.animateFloat(
+        initialValue = 0.6f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1500),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "pulseAlpha"
+    )
+
+    Box(
+        modifier = Modifier
+            .size(56.dp)
+            .scale(scale)
+            .background(
+                MaterialTheme.colorScheme.primary.copy(alpha = pulseAlpha * 0.3f),
+                CircleShape
+            )
+            .border(
+                2.dp,
+                MaterialTheme.colorScheme.primary.copy(alpha = pulseAlpha),
+                CircleShape
+            )
+            .clickable(enabled = enabled) {
+                if (enabled) {
+                    isPressed = true
+                    onClick()
+                }
+            },
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            Icon(
+                imageVector = Icons.Default.MergeType,
+                contentDescription = "Merge Audio & Video",
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(24.dp)
+            )
+            Text(
+                text = "Merge",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.primary,
+                fontWeight = FontWeight.Bold,
+                fontSize = 10.sp
+            )
+        }
+    }
+
+    LaunchedEffect(isPressed) {
+        if (isPressed) {
+            delay(100)
+            isPressed = false
+        }
+    }
+}
+
+// Updated EnhancedTopStatusBar to show audio received indicator
+@Composable
+private fun EnhancedTopStatusBar(
+    isRecording: Boolean,
+    cameraStatus: String,
+    isConnected: Boolean,
+    onSettingsClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    cameraManager: CameraManager,
+    recordingTime: String,
+    hasReceivedAudio: Boolean = false
+) {
+    Card(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(16.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = Color.Black.copy(alpha = 0.7f)
+        ),
+        shape = RoundedCornerShape(24.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(20.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // Enhanced recording status
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(16.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // Animated recording indicator
+                AnimatedRecordingDot(isRecording = isRecording)
+
+                Column {
+                    Text(
+                        text = if (isRecording) "RECORDING" else "READY",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White
+                    )
+                    Text(
+                        text = cameraStatus,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color.White.copy(alpha = 0.8f)
+                    )
+                    // Show audio received indicator
+                    if (hasReceivedAudio) {
+                        Text(
+                            text = "🎵 Audio received",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = Color.Green
+                        )
+                    }
+                }
+            }
+
+            // Show timer when recording in top right, otherwise show connection status
+            if (isRecording) {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Timer,
+                        contentDescription = "Recording Timer",
+                        tint = Color.Red,
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Text(
+                        text = recordingTime,
+                        style = MaterialTheme.typography.labelMedium,
+                        color = Color.Red,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            } else {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = if (isConnected) Icons.Default.Wifi else Icons.Default.WifiOff,
+                        contentDescription = "Connection Status",
+                        tint = if (isConnected) Color.Green else Color.Red,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+            }
+        }
+    }
+}
+
+
+
+@Composable
+private fun MergeAvailableButton(
+    onMergeClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Card(
+        modifier = modifier.clickable { onMergeClick() },
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.primary
+        ),
+        shape = RoundedCornerShape(20.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                imageVector = Icons.Default.MergeType,
+                contentDescription = "Merge",
+                tint = Color.White,
+                modifier = Modifier.size(20.dp)
+            )
+            Text(
+                text = "Merge Audio & Video",
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold,
+                color = Color.White
             )
         }
     }
@@ -570,62 +850,6 @@ private fun AnimatedRecordingDot(isRecording: Boolean) {
     )
 }
 
-@Composable
-private fun EnhancedRecordingControls(
-    isRecording: Boolean,
-    onStartRecording: () -> Unit,
-    onStopRecording: () -> Unit,
-    onCameraSwitch: () -> Unit,
-    onGalleryClick: () -> Unit,
-    canSwitchCamera: Boolean,
-    modifier: Modifier = Modifier
-) {
-    Card(
-        modifier = modifier
-            .fillMaxWidth()
-            .padding(20.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = Color.Black.copy(alpha = 0.7f)
-        ),
-        shape = RoundedCornerShape(32.dp),
-        elevation = CardDefaults.cardElevation(defaultElevation = 12.dp)
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(28.dp),
-            horizontalArrangement = Arrangement.SpaceEvenly,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            // Camera flip button
-            EnhancedControlButton(
-                icon = Icons.Default.Cameraswitch,
-                size = 56.dp,
-                backgroundColor = Color.White.copy(alpha = if (canSwitchCamera) 0.2f else 0.1f),
-                iconColor = Color.White.copy(alpha = if (canSwitchCamera) 1f else 0.5f),
-                enabled = canSwitchCamera && !isRecording,
-                onClick = onCameraSwitch
-            )
-
-            // Main record button with enhanced animation
-            MainRecordButton(
-                isRecording = isRecording,
-                onStartRecording = onStartRecording,
-                onStopRecording = onStopRecording
-            )
-
-            // Gallery button
-            EnhancedControlButton(
-                icon = Icons.Default.PhotoLibrary,
-                size = 56.dp,
-                backgroundColor = Color.White.copy(alpha = 0.2f),
-                iconColor = Color.White,
-                enabled = true,
-                onClick = onGalleryClick
-            )
-        }
-    }
-}
 
 @Composable
 private fun MainRecordButton(

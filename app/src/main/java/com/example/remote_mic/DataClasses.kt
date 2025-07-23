@@ -17,5 +17,9 @@ data class AppState(
     val recordedVideoFile: File? = null,
     val isSendingFile: Boolean = false,
     val transferProgress: String = "",
-    val lastError: String? = null
+    val lastError: String? = null,
+    // New fields for merge functionality
+    val showMergeScreen: Boolean = false,
+    val mergedVideoFile: File? = null,
+    val canMerge: Boolean = false // true when we have both video and audio files
 )

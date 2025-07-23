@@ -1,3 +1,5 @@
+
+// Updated RemoteMicApp.kt
 package com.example.remote_mic.ui
 
 import androidx.compose.foundation.background
@@ -23,6 +25,16 @@ fun RemoteMicApp(
 ) {
     val appState by connectionManager.state.collectAsStateWithLifecycle()
 
+    // Check if we can merge (have both files and are on camera side)
+    val canMerge = appState.myRole == "camera" &&
+            appState.receivedAudioFile != null &&
+            appState.recordedVideoFile != null
+
+    // Update the connection manager when merge capability changes
+    LaunchedEffect(canMerge) {
+        connectionManager.updateState { copy(canMerge = canMerge) }
+    }
+
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -36,18 +48,34 @@ fun RemoteMicApp(
             )
     ) {
         Column(
-            modifier = Modifier
-                .fillMaxSize(),
-
+            modifier = Modifier.fillMaxSize(),
             verticalArrangement = Arrangement.spacedBy(20.dp)
         ) {
-
             // Main Content Area
             Box(
                 modifier = Modifier.weight(1f),
                 contentAlignment = Alignment.Center
             ) {
                 when {
+                    // Show merge screen when requested and files are available
+                    appState.showMergeScreen && canMerge -> {
+                        MergeEditScreen(
+                            videoFile = appState.recordedVideoFile!!,
+                            audioFile = appState.receivedAudioFile!!,
+                            onBackToCamera = {
+                                connectionManager.updateState { copy(showMergeScreen = false) }
+                            },
+                            onMergeComplete = { mergedFile ->
+                                connectionManager.updateState {
+                                    copy(
+                                        mergedVideoFile = mergedFile,
+                                        showMergeScreen = false
+                                    )
+                                }
+                            }
+                        )
+                    }
+
                     !appState.isConnected -> {
                         ConnectionScreen(
                             appState = appState,
@@ -89,10 +117,6 @@ fun RemoteMicApp(
                     }
                 }
             }
-
-
-
-
         }
 
         // Transfer progress indicator

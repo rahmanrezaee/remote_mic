@@ -87,9 +87,22 @@ dependencies {
     implementation(libs.androidx.activity.ktx)
 
     // OPTION 1: FFmpeg-kit from Appodeal (with smart-exception)
-    implementation("com.arthenica:ffmpeg-kit-min-gpl:6.0-2")
-    implementation("com.arthenica:smart-exception-java:0.2.1")
+    implementation(libs.ffmpeg.kit.min.gpl)
+    implementation(libs.smart.exception.java)
 
+
+    implementation(libs.androidx.media3.exoplayer)
+
+    // ExoPlayer UI components
+    implementation(libs.androidx.media3.ui)
+
+    // ExoPlayer common functionality
+    implementation(libs.androidx.media3.common)
+
+    // Optional: For specific media formats
+    implementation(libs.androidx.media3.exoplayer.dash)
+    implementation(libs.androidx.media3.exoplayer.hls)
+    implementation(libs.androidx.media3.exoplayer.smoothstreaming)
 
 
     // Optional: Camera and Audio dependencies (uncomment when implementing media features)

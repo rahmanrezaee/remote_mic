@@ -1,410 +1,325 @@
-package com.example.remote_mic.manager
+package com.example.remote_mic.managers
 
 import android.content.Context
 import android.util.Log
 import com.arthenica.ffmpegkit.FFmpegKit
+import com.arthenica.ffmpegkit.FFmpegSession
 import com.arthenica.ffmpegkit.ReturnCode
 import kotlinx.coroutines.*
 import java.io.File
 
-/**
- * AudioVideoMerger handles audio and video processing using FFmpeg
- * Supports merging, trimming, and format conversion
- */
 class AudioVideoMerger(private val context: Context) {
     companion object {
         private const val TAG = "AudioVideoMerger"
     }
 
-    private val mergedDirectory by lazy {
-        File(context.getExternalFilesDir(null), "merged").apply {
-            if (!exists()) mkdirs()
-        }
-    }
+    data class MergeOptions(
+        val audioVolume: Float = 1.0f,
+        val videoVolume: Float = 0.5f, // Keep some original video audio
+        val syncOffset: Float = 0.0f, // Audio sync offset in seconds
+        val fadeIn: Float = 0.0f,
+        val fadeOut: Float = 0.0f,
+        val replaceAudio: Boolean = false // If true, completely replace video audio
+    )
 
-    private val tempDirectory by lazy {
-        File(context.getExternalFilesDir(null), "temp").apply {
-            if (!exists()) mkdirs()
-        }
-    }
-
-    /**
-     * Merge audio and video files into a single MP4 file
-     */
     fun mergeAudioVideo(
         videoFile: File,
         audioFile: File,
         outputFileName: String = "merged_${System.currentTimeMillis()}.mp4",
-        onProgress: ((String) -> Unit)? = null,
+        options: MergeOptions = MergeOptions(),
+        onProgress: ((Int, String) -> Unit)? = null,
         onComplete: (File?) -> Unit
     ) {
         CoroutineScope(Dispatchers.IO).launch {
             try {
-                Log.d(TAG, "🎬 Starting merge process...")
+                Log.d(TAG, "🎬 Starting enhanced merge process...")
 
                 // Validate files
-                withContext(Dispatchers.Main) { onProgress?.invoke("Validating files...") }
+                withContext(Dispatchers.Main) {
+                    onProgress?.invoke(5, "Validating files...")
+                }
 
-                if (!validateFile(videoFile, "Video")) {
+                if (!validateFiles(videoFile, audioFile)) {
                     withContext(Dispatchers.Main) { onComplete(null) }
                     return@launch
                 }
 
-                if (!validateFile(audioFile, "Audio")) {
-                    withContext(Dispatchers.Main) { onComplete(null) }
-                    return@launch
-                }
+                // Create output directory
+                val outputDir = File(context.getExternalFilesDir(null), "merged")
+                outputDir.mkdirs()
+                val outputFile = File(outputDir, outputFileName)
 
-                // Create output file
-                val outputFile = File(mergedDirectory, outputFileName)
-                if (outputFile.exists()) outputFile.delete()
+                // Delete existing output file
+                if (outputFile.exists()) {
+                    outputFile.delete()
+                }
 
                 Log.d(TAG, "📁 Files ready for merge:")
                 Log.d(TAG, "Video: ${videoFile.absolutePath} (${videoFile.length()} bytes)")
                 Log.d(TAG, "Audio: ${audioFile.absolutePath} (${audioFile.length()} bytes)")
                 Log.d(TAG, "Output: ${outputFile.absolutePath}")
 
-                withContext(Dispatchers.Main) { onProgress?.invoke("Merging files...") }
-
-                // Switch to main thread for FFmpeg execution
                 withContext(Dispatchers.Main) {
-                    performMerge(videoFile, audioFile, outputFile, onProgress, onComplete)
+                    onProgress?.invoke(15, "Preparing merge...")
+                }
+
+                // Get media information first
+                val videoInfo = getVideoInfo(videoFile)
+                val audioInfo = getAudioInfo(audioFile)
+
+                Log.d(TAG, "Video info: $videoInfo")
+                Log.d(TAG, "Audio info: $audioInfo")
+
+                withContext(Dispatchers.Main) {
+                    onProgress?.invoke(25, "Processing media...")
+                }
+
+                // Perform merge on main thread for FFmpeg
+                withContext(Dispatchers.Main) {
+                    performEnhancedMerge(
+                        videoFile,
+                        audioFile,
+                        outputFile,
+                        options,
+                        onProgress,
+                        onComplete
+                    )
                 }
 
             } catch (e: Exception) {
                 Log.e(TAG, "❌ Error in merge process", e)
-                withContext(Dispatchers.Main) {
-                    onProgress?.invoke("Merge failed: ${e.message}")
-                    onComplete(null)
-                }
+                withContext(Dispatchers.Main) { onComplete(null) }
             }
         }
     }
 
-    /**
-     * Trim audio file to specified duration
-     */
-    fun trimAudio(
-        audioFile: File,
-        startTimeMs: Long,
-        endTimeMs: Long,
-        outputFileName: String = "trimmed_audio_${System.currentTimeMillis()}.mp4",
-        onProgress: ((String) -> Unit)? = null,
-        onComplete: (File?) -> Unit
-    ) {
-        CoroutineScope(Dispatchers.IO).launch {
+    private fun validateFiles(videoFile: File, audioFile: File): Boolean {
+        if (!videoFile.exists() || videoFile.length() == 0L) {
+            Log.e(TAG, "❌ Video file invalid")
+            return false
+        }
+
+        if (!audioFile.exists() || audioFile.length() == 0L) {
+            Log.e(TAG, "❌ Audio file invalid")
+            return false
+        }
+
+        // Check file extensions
+        val videoExt = videoFile.extension.lowercase()
+        val audioExt = audioFile.extension.lowercase()
+
+        if (videoExt !in listOf("mp4", "mov", "avi", "mkv")) {
+            Log.w(TAG, "⚠️ Unsupported video format: $videoExt")
+        }
+
+        if (audioExt !in listOf("mp4", "m4a", "aac", "mp3", "wav")) {
+            Log.w(TAG, "⚠️ Unsupported audio format: $audioExt")
+        }
+
+        return true
+    }
+
+    private suspend fun getVideoInfo(videoFile: File): Map<String, String> {
+        return withContext(Dispatchers.IO) {
+            val info = mutableMapOf<String, String>()
             try {
-                if (!validateFile(audioFile, "Audio")) {
-                    withContext(Dispatchers.Main) { onComplete(null) }
-                    return@launch
-                }
+                val command = "-i \"${videoFile.absolutePath}\" -hide_banner"
+                val session = FFmpegKit.execute(command)
+                val output = session.output ?: ""
 
-                val outputFile = File(tempDirectory, outputFileName)
-                if (outputFile.exists()) outputFile.delete()
-
-                val startSeconds = startTimeMs / 1000.0
-                val duration = (endTimeMs - startTimeMs) / 1000.0
-
-                withContext(Dispatchers.Main) { onProgress?.invoke("Trimming audio...") }
-
-                val command = buildString {
-                    append("-i \"${audioFile.absolutePath}\" ")
-                    append("-ss $startSeconds ")
-                    append("-t $duration ")
-                    append("-c:a aac ")
-                    append("-b:a 128k ")
-                    append("-y ")
-                    append("\"${outputFile.absolutePath}\"")
-                }
-
-                Log.d(TAG, "🎵 Audio trim command: $command")
-
-                withContext(Dispatchers.Main) {
-                    FFmpegKit.executeAsync(command) { session ->
-                        val returnCode = session.returnCode
-                        if (ReturnCode.isSuccess(returnCode) && outputFile.exists() && outputFile.length() > 0) {
-                            Log.d(TAG, "✅ Audio trim successful!")
-                            onProgress?.invoke("Audio trimmed successfully!")
-                            onComplete(outputFile)
-                        } else {
-                            Log.e(TAG, "❌ Audio trim failed")
-                            onProgress?.invoke("Audio trim failed")
-                            onComplete(null)
-                        }
+                // Parse basic info from FFmpeg output
+                if (output.contains("Duration:")) {
+                    val durationRegex = "Duration: ([^,]+)".toRegex()
+                    val match = durationRegex.find(output)
+                    match?.groupValues?.get(1)?.let {
+                        info["duration"] = it.trim()
                     }
                 }
 
-            } catch (e: Exception) {
-                Log.e(TAG, "❌ Error trimming audio", e)
-                withContext(Dispatchers.Main) {
-                    onProgress?.invoke("Trim failed: ${e.message}")
-                    onComplete(null)
+                if (output.contains("Video:")) {
+                    info["hasVideo"] = "true"
                 }
+
+                if (output.contains("Audio:")) {
+                    info["hasAudio"] = "true"
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to get video info", e)
             }
+            info
         }
     }
 
-    /**
-     * Trim video file to specified duration
-     */
-    fun trimVideo(
-        videoFile: File,
-        startTimeMs: Long,
-        endTimeMs: Long,
-        outputFileName: String = "trimmed_video_${System.currentTimeMillis()}.mp4",
-        onProgress: ((String) -> Unit)? = null,
-        onComplete: (File?) -> Unit
-    ) {
-        CoroutineScope(Dispatchers.IO).launch {
+    private suspend fun getAudioInfo(audioFile: File): Map<String, String> {
+        return withContext(Dispatchers.IO) {
+            val info = mutableMapOf<String, String>()
             try {
-                if (!validateFile(videoFile, "Video")) {
-                    withContext(Dispatchers.Main) { onComplete(null) }
-                    return@launch
-                }
+                val command = "-i \"${audioFile.absolutePath}\" -hide_banner"
+                val session = FFmpegKit.execute(command)
+                val output = session.output ?: ""
 
-                val outputFile = File(tempDirectory, outputFileName)
-                if (outputFile.exists()) outputFile.delete()
-
-                val startSeconds = startTimeMs / 1000.0
-                val duration = (endTimeMs - startTimeMs) / 1000.0
-
-                withContext(Dispatchers.Main) { onProgress?.invoke("Trimming video...") }
-
-                val command = buildString {
-                    append("-i \"${videoFile.absolutePath}\" ")
-                    append("-ss $startSeconds ")
-                    append("-t $duration ")
-                    append("-c:v libx264 ")
-                    append("-c:a aac ")
-                    append("-preset fast ")
-                    append("-crf 23 ")
-                    append("-y ")
-                    append("\"${outputFile.absolutePath}\"")
-                }
-
-                Log.d(TAG, "🎥 Video trim command: $command")
-
-                withContext(Dispatchers.Main) {
-                    FFmpegKit.executeAsync(command) { session ->
-                        val returnCode = session.returnCode
-                        if (ReturnCode.isSuccess(returnCode) && outputFile.exists() && outputFile.length() > 0) {
-                            Log.d(TAG, "✅ Video trim successful!")
-                            onProgress?.invoke("Video trimmed successfully!")
-                            onComplete(outputFile)
-                        } else {
-                            Log.e(TAG, "❌ Video trim failed")
-                            onProgress?.invoke("Video trim failed")
-                            onComplete(null)
-                        }
+                if (output.contains("Duration:")) {
+                    val durationRegex = "Duration: ([^,]+)".toRegex()
+                    val match = durationRegex.find(output)
+                    match?.groupValues?.get(1)?.let {
+                        info["duration"] = it.trim()
                     }
                 }
-
             } catch (e: Exception) {
-                Log.e(TAG, "❌ Error trimming video", e)
-                withContext(Dispatchers.Main) {
-                    onProgress?.invoke("Trim failed: ${e.message}")
-                    onComplete(null)
-                }
+                Log.e(TAG, "Failed to get audio info", e)
             }
+            info
         }
     }
 
-    /**
-     * Convert audio format
-     */
-    fun convertAudio(
-        audioFile: File,
-        targetFormat: AudioFormat = AudioFormat.MP4_AAC,
-        outputFileName: String = "converted_${System.currentTimeMillis()}.${targetFormat.extension}",
-        onProgress: ((String) -> Unit)? = null,
-        onComplete: (File?) -> Unit
-    ) {
-        CoroutineScope(Dispatchers.IO).launch {
-            try {
-                if (!validateFile(audioFile, "Audio")) {
-                    withContext(Dispatchers.Main) { onComplete(null) }
-                    return@launch
-                }
-
-                val outputFile = File(tempDirectory, outputFileName)
-                if (outputFile.exists()) outputFile.delete()
-
-                withContext(Dispatchers.Main) { onProgress?.invoke("Converting audio format...") }
-
-                val command = buildString {
-                    append("-i \"${audioFile.absolutePath}\" ")
-                    append("-c:a ${targetFormat.codec} ")
-                    append("-b:a ${targetFormat.bitrate} ")
-                    append("-ar ${targetFormat.sampleRate} ")
-                    append("-y ")
-                    append("\"${outputFile.absolutePath}\"")
-                }
-
-                Log.d(TAG, "🔄 Audio convert command: $command")
-
-                withContext(Dispatchers.Main) {
-                    FFmpegKit.executeAsync(command) { session ->
-                        val returnCode = session.returnCode
-                        if (ReturnCode.isSuccess(returnCode) && outputFile.exists() && outputFile.length() > 0) {
-                            Log.d(TAG, "✅ Audio conversion successful!")
-                            onProgress?.invoke("Audio converted successfully!")
-                            onComplete(outputFile)
-                        } else {
-                            Log.e(TAG, "❌ Audio conversion failed")
-                            onProgress?.invoke("Audio conversion failed")
-                            onComplete(null)
-                        }
-                    }
-                }
-
-            } catch (e: Exception) {
-                Log.e(TAG, "❌ Error converting audio", e)
-                withContext(Dispatchers.Main) {
-                    onProgress?.invoke("Conversion failed: ${e.message}")
-                    onComplete(null)
-                }
-            }
-        }
-    }
-
-    /**
-     * Extract audio from video file
-     */
-    fun extractAudio(
-        videoFile: File,
-        outputFileName: String = "extracted_audio_${System.currentTimeMillis()}.mp4",
-        onProgress: ((String) -> Unit)? = null,
-        onComplete: (File?) -> Unit
-    ) {
-        CoroutineScope(Dispatchers.IO).launch {
-            try {
-                if (!validateFile(videoFile, "Video")) {
-                    withContext(Dispatchers.Main) { onComplete(null) }
-                    return@launch
-                }
-
-                val outputFile = File(tempDirectory, outputFileName)
-                if (outputFile.exists()) outputFile.delete()
-
-                withContext(Dispatchers.Main) { onProgress?.invoke("Extracting audio from video...") }
-
-                val command = buildString {
-                    append("-i \"${videoFile.absolutePath}\" ")
-                    append("-vn ")  // No video
-                    append("-c:a aac ")
-                    append("-b:a 128k ")
-                    append("-y ")
-                    append("\"${outputFile.absolutePath}\"")
-                }
-
-                Log.d(TAG, "🎵 Audio extract command: $command")
-
-                withContext(Dispatchers.Main) {
-                    FFmpegKit.executeAsync(command) { session ->
-                        val returnCode = session.returnCode
-                        if (ReturnCode.isSuccess(returnCode) && outputFile.exists() && outputFile.length() > 0) {
-                            Log.d(TAG, "✅ Audio extraction successful!")
-                            onProgress?.invoke("Audio extracted successfully!")
-                            onComplete(outputFile)
-                        } else {
-                            Log.e(TAG, "❌ Audio extraction failed")
-                            onProgress?.invoke("Audio extraction failed")
-                            onComplete(null)
-                        }
-                    }
-                }
-
-            } catch (e: Exception) {
-                Log.e(TAG, "❌ Error extracting audio", e)
-                withContext(Dispatchers.Main) {
-                    onProgress?.invoke("Extraction failed: ${e.message}")
-                    onComplete(null)
-                }
-            }
-        }
-    }
-
-    private fun performMerge(
+    private fun performEnhancedMerge(
         videoFile: File,
         audioFile: File,
         outputFile: File,
-        onProgress: ((String) -> Unit)? = null,
+        options: MergeOptions,
+        onProgress: ((Int, String) -> Unit)?,
         onComplete: (File?) -> Unit
     ) {
-        onProgress?.invoke("Processing with FFmpeg...")
+        val command = buildEnhancedCommand(videoFile, audioFile, outputFile, options)
 
-        // Enhanced FFmpeg command for better audio sync and quality
-        val command = buildString {
-            append("-i \"${videoFile.absolutePath}\" ")
-            append("-i \"${audioFile.absolutePath}\" ")
-            append("-c:v copy ")  // Copy video stream as-is (no re-encoding)
-            append("-c:a aac ")   // Re-encode audio as AAC
-            append("-b:a 128k ")  // Audio bitrate 128kbps
-            append("-ar 44100 ")  // Audio sample rate
-            append("-map 0:v:0 ") // Map first video stream from first input
-            append("-map 1:a:0 ") // Map first audio stream from second input
-            append("-shortest ")  // End when shortest stream ends
-            append("-avoid_negative_ts make_zero ") // Fix timestamp issues
-            append("-async 1 ")   // Audio sync method
-            append("-vsync cfr ") // Constant frame rate for video
-            append("-y ")         // Overwrite output file
-            append("\"${outputFile.absolutePath}\"")
-        }
-
-        Log.d(TAG, "🎬 FFmpeg command: $command")
+        Log.d(TAG, "🎬 Enhanced FFmpeg command: $command")
+        onProgress?.invoke(35, "Merging audio and video...")
 
         try {
             FFmpegKit.executeAsync(command) { session ->
-                val returnCode = session.returnCode
-                val output = session.output
-
-                Log.d(TAG, "🎬 FFmpeg execution completed")
-                Log.d(TAG, "Return code: $returnCode")
-                Log.d(TAG, "Session state: ${session.state}")
-
-                if (ReturnCode.isSuccess(returnCode)) {
-                    if (outputFile.exists() && outputFile.length() > 0) {
-                        Log.d(TAG, "✅ Merge successful!")
-                        Log.d(TAG, "Output file: ${outputFile.absolutePath}")
-                        Log.d(TAG, "Output size: ${outputFile.length()} bytes")
-                        onProgress?.invoke("Merge completed successfully!")
-                        onComplete(outputFile)
-                    } else {
-                        Log.e(TAG, "❌ Output file is empty or doesn't exist")
-                        Log.e(TAG, "FFmpeg output: $output")
-                        onProgress?.invoke("Merge failed - trying alternative method...")
-                        tryAlternativeMerge(videoFile, audioFile, outputFile, onProgress, onComplete)
-                    }
-                } else {
-                    Log.e(TAG, "❌ FFmpeg failed with return code: $returnCode")
-                    Log.e(TAG, "FFmpeg output: $output")
-                    onProgress?.invoke("Primary merge failed - trying alternative...")
-                    // Try alternative command
-                    tryAlternativeMerge(videoFile, audioFile, outputFile, onProgress, onComplete)
-                }
+                handleMergeResult(session, outputFile, videoFile, audioFile, options, onProgress, onComplete)
             }
         } catch (e: Exception) {
             Log.e(TAG, "❌ Exception during FFmpeg execution", e)
-            onProgress?.invoke("Merge failed with error")
             onComplete(null)
         }
     }
 
-    private fun tryAlternativeMerge(
+    private fun buildEnhancedCommand(
         videoFile: File,
         audioFile: File,
         outputFile: File,
-        onProgress: ((String) -> Unit)? = null,
+        options: MergeOptions
+    ): String {
+        return buildString {
+            // Input files
+            append("-i \"${videoFile.absolutePath}\" ")
+            append("-i \"${audioFile.absolutePath}\" ")
+
+            if (options.replaceAudio) {
+                // Simple replacement mode
+                append("-c:v copy ")
+                append("-c:a aac ")
+                append("-b:a 128k ")
+                append("-map 0:v:0 ")
+                append("-map 1:a:0 ")
+
+                if (options.syncOffset != 0.0f) {
+                    append("-itsoffset ${options.syncOffset} ")
+                }
+            } else {
+                // Mix both audio tracks
+                append("-c:v copy ")
+                append("-filter_complex \"")
+
+                // Audio mixing with volume controls
+                append("[1:a]volume=${options.audioVolume}")
+
+                if (options.fadeIn > 0) {
+                    append(",afade=t=in:d=${options.fadeIn}")
+                }
+
+                if (options.fadeOut > 0) {
+                    append(",afade=t=out:d=${options.fadeOut}")
+                }
+
+                if (options.syncOffset != 0.0f) {
+                    append(",adelay=${(options.syncOffset * 1000).toInt()}|${(options.syncOffset * 1000).toInt()}")
+                }
+
+                append("[audio_processed];")
+                append("[0:a]volume=${options.videoVolume}[video_audio];")
+                append("[video_audio][audio_processed]amix=inputs=2:duration=shortest")
+                append("\" ")
+
+                append("-c:a aac ")
+                append("-b:a 192k ")
+                append("-map 0:v:0 ")
+            }
+
+            // Common options
+            append("-shortest ")
+            append("-avoid_negative_ts make_zero ")
+            append("-fflags +genpts ")
+            append("-y ")
+            append("\"${outputFile.absolutePath}\"")
+        }
+    }
+
+    private fun handleMergeResult(
+        session: FFmpegSession,
+        outputFile: File,
+        videoFile: File,
+        audioFile: File,
+        options: MergeOptions,
+        onProgress: ((Int, String) -> Unit)?,
         onComplete: (File?) -> Unit
     ) {
-        Log.d(TAG, "🔄 Trying alternative merge method...")
-        onProgress?.invoke("Trying alternative merge method...")
+        val returnCode = session.returnCode
+        val output = session.output
+        val logs = session.logsAsString
+
+        Log.d(TAG, "🎬 FFmpeg execution completed")
+        Log.d(TAG, "Return code: $returnCode")
+        Log.d(TAG, "Session state: ${session.state}")
+
+        if (ReturnCode.isSuccess(returnCode)) {
+            if (outputFile.exists() && outputFile.length() > 0) {
+                Log.d(TAG, "✅ Enhanced merge successful!")
+                Log.d(TAG, "Output file: ${outputFile.absolutePath}")
+                Log.d(TAG, "Output size: ${outputFile.length()} bytes")
+                onProgress?.invoke(100, "Merge completed successfully!")
+
+                // Brief delay to show completion
+                CoroutineScope(Dispatchers.Main).launch {
+                    delay(500)
+                    onComplete(outputFile)
+                }
+            } else {
+                Log.e(TAG, "❌ Output file is empty or doesn't exist")
+                Log.e(TAG, "FFmpeg output: $output")
+                onProgress?.invoke(50, "Trying alternative method...")
+
+                // Try fallback method
+                tryFallbackMerge(videoFile, audioFile, outputFile, onProgress, onComplete)
+            }
+        } else {
+            Log.e(TAG, "❌ FFmpeg failed with return code: $returnCode")
+            Log.e(TAG, "FFmpeg logs: $logs")
+            onProgress?.invoke(50, "Trying alternative method...")
+
+            // Try fallback method
+            tryFallbackMerge(videoFile, audioFile, outputFile, onProgress, onComplete)
+        }
+    }
+
+    private fun tryFallbackMerge(
+        videoFile: File,
+        audioFile: File,
+        outputFile: File,
+        onProgress: ((Int, String) -> Unit)?,
+        onComplete: (File?) -> Unit
+    ) {
+        Log.d(TAG, "🔄 Trying fallback merge method...")
+        onProgress?.invoke(60, "Using fallback method...")
 
         // Delete the failed output file
-        if (outputFile.exists()) outputFile.delete()
+        if (outputFile.exists()) {
+            outputFile.delete()
+        }
 
-        // Alternative command - simpler approach
-        val altCommand = buildString {
+        // Simple fallback command
+        val fallbackCommand = buildString {
             append("-i \"${videoFile.absolutePath}\" ")
             append("-i \"${audioFile.absolutePath}\" ")
             append("-c:v copy ")
@@ -417,143 +332,69 @@ class AudioVideoMerger(private val context: Context) {
             append("\"${outputFile.absolutePath}\"")
         }
 
-        Log.d(TAG, "🎬 Alternative FFmpeg command: $altCommand")
+        Log.d(TAG, "🎬 Fallback FFmpeg command: $fallbackCommand")
+        onProgress?.invoke(75, "Processing with basic method...")
 
-        FFmpegKit.executeAsync(altCommand) { session ->
+        FFmpegKit.executeAsync(fallbackCommand) { session ->
             val returnCode = session.returnCode
             val output = session.output
 
             if (ReturnCode.isSuccess(returnCode) && outputFile.exists() && outputFile.length() > 0) {
-                Log.d(TAG, "✅ Alternative merge successful!")
+                Log.d(TAG, "✅ Fallback merge successful!")
                 Log.d(TAG, "Output size: ${outputFile.length()} bytes")
-                onProgress?.invoke("Alternative merge successful!")
-                onComplete(outputFile)
+                onProgress?.invoke(100, "Merge completed!")
+
+                CoroutineScope(Dispatchers.Main).launch {
+                    delay(500)
+                    onComplete(outputFile)
+                }
             } else {
-                Log.e(TAG, "❌ Alternative merge also failed")
+                Log.e(TAG, "❌ Fallback merge also failed")
                 Log.e(TAG, "Return code: $returnCode")
                 Log.e(TAG, "Output: $output")
-                onProgress?.invoke("All merge attempts failed")
+                onProgress?.invoke(0, "Merge failed")
                 onComplete(null)
             }
         }
     }
 
-    private fun validateFile(file: File, type: String): Boolean {
-        if (!file.exists()) {
-            Log.e(TAG, "❌ $type file doesn't exist: ${file.absolutePath}")
-            return false
-        }
-        if (file.length() == 0L) {
-            Log.e(TAG, "❌ $type file is empty: ${file.absolutePath}")
-            return false
-        }
-        Log.d(TAG, "✅ $type file validated: ${file.name} (${file.length()} bytes)")
-        return true
-    }
-
-    /**
-     * Get information about media file
-     */
-    fun getMediaInfo(
-        file: File,
-        onComplete: (MediaInfo?) -> Unit
+    // Utility function to create a simple merge with default settings
+    fun quickMerge(
+        videoFile: File,
+        audioFile: File,
+        onProgress: ((Int, String) -> Unit)? = null,
+        onComplete: (File?) -> Unit
     ) {
-        if (!validateFile(file, "Media")) {
-            onComplete(null)
-            return
-        }
-
-        val command = "-i \"${file.absolutePath}\""
-
-        FFmpegKit.executeAsync(command) { session ->
-            val output = session.allLogsAsString
-
-            // Parse basic info from FFmpeg output
-            val duration = extractDuration(output)
-            val resolution = extractResolution(output)
-            val audioCodec = extractAudioCodec(output)
-            val videoCodec = extractVideoCodec(output)
-
-            val mediaInfo = MediaInfo(
-                file = file,
-                duration = duration,
-                resolution = resolution,
-                audioCodec = audioCodec,
-                videoCodec = videoCodec,
-                fileSize = file.length()
-            )
-
-            onComplete(mediaInfo)
-        }
+        mergeAudioVideo(
+            videoFile = videoFile,
+            audioFile = audioFile,
+            options = MergeOptions(replaceAudio = true),
+            onProgress = onProgress,
+            onComplete = onComplete
+        )
     }
 
-    private fun extractDuration(output: String): Long {
-        val durationRegex = """Duration: (\d{2}):(\d{2}):(\d{2})\.(\d{2})""".toRegex()
-        val match = durationRegex.find(output)
-        return if (match != null) {
-            val hours = match.groupValues[1].toLong()
-            val minutes = match.groupValues[2].toLong()
-            val seconds = match.groupValues[3].toLong()
-            val centiseconds = match.groupValues[4].toLong()
-            (hours * 3600 + minutes * 60 + seconds) * 1000 + centiseconds * 10
-        } else {
-            0L
-        }
+    // Advanced merge with custom audio mixing
+    fun advancedMerge(
+        videoFile: File,
+        audioFile: File,
+        audioVolume: Float = 1.0f,
+        keepVideoAudio: Boolean = true,
+        syncOffset: Float = 0.0f,
+        onProgress: ((Int, String) -> Unit)? = null,
+        onComplete: (File?) -> Unit
+    ) {
+        mergeAudioVideo(
+            videoFile = videoFile,
+            audioFile = audioFile,
+            options = MergeOptions(
+                audioVolume = audioVolume,
+                videoVolume = if (keepVideoAudio) 0.3f else 0.0f,
+                syncOffset = syncOffset,
+                replaceAudio = !keepVideoAudio
+            ),
+            onProgress = onProgress,
+            onComplete = onComplete
+        )
     }
-
-    private fun extractResolution(output: String): String {
-        val resolutionRegex = """(\d{3,4})x(\d{3,4})""".toRegex()
-        val match = resolutionRegex.find(output)
-        return match?.value ?: "Unknown"
-    }
-
-    private fun extractAudioCodec(output: String): String {
-        val audioRegex = """Audio: ([^,\s]+)""".toRegex()
-        val match = audioRegex.find(output)
-        return match?.groupValues?.get(1) ?: "Unknown"
-    }
-
-    private fun extractVideoCodec(output: String): String {
-        val videoRegex = """Video: ([^,\s]+)""".toRegex()
-        val match = videoRegex.find(output)
-        return match?.groupValues?.get(1) ?: "Unknown"
-    }
-
-    /**
-     * Clean up temporary files
-     */
-    fun cleanupTempFiles() {
-        try {
-            tempDirectory.listFiles()?.forEach { file ->
-                if (file.isFile() && System.currentTimeMillis() - file.lastModified() > 24 * 60 * 60 * 1000) {
-                    file.delete()
-                    Log.d(TAG, "🧹 Cleaned up old temp file: ${file.name}")
-                }
-            }
-        } catch (e: Exception) {
-            Log.e(TAG, "Error cleaning up temp files", e)
-        }
-    }
-}
-
-// Data classes for media processing
-data class MediaInfo(
-    val file: File,
-    val duration: Long, // in milliseconds
-    val resolution: String,
-    val audioCodec: String,
-    val videoCodec: String,
-    val fileSize: Long
-)
-
-enum class AudioFormat(
-    val extension: String,
-    val codec: String,
-    val bitrate: String,
-    val sampleRate: String
-) {
-    MP4_AAC("mp4", "aac", "128k", "44100"),
-    MP3("mp3", "mp3", "192k", "44100"),
-    WAV("wav", "pcm_s16le", "1411k", "44100"),
-    M4A("m4a", "aac", "128k", "44100")
 }
