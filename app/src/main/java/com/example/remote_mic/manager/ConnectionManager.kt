@@ -3,8 +3,8 @@ package com.example.remote_mic.managers
 import android.content.Context
 import android.os.Build
 import android.util.Log
-import com.example.remote_mic.AppState
-import com.example.remote_mic.Command
+import com.example.remote_mic.data.AppState
+import com.example.remote_mic.data.Command
 import com.google.android.gms.nearby.Nearby
 import com.google.android.gms.nearby.connection.AdvertisingOptions
 import com.google.android.gms.nearby.connection.ConnectionInfo

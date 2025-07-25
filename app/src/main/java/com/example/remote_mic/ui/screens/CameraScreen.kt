@@ -74,7 +74,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
-import com.example.remote_mic.AppState
+import com.example.remote_mic.data.AppState
 import com.example.remote_mic.managers.CameraManager
 import com.example.remote_mic.managers.ConnectionManager
 import com.example.remote_mic.ui.components.UnifiedEnhancedStatusBar

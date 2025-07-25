@@ -48,7 +48,7 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.example.remote_mic.AppState
+import com.example.remote_mic.data.AppState
 import com.example.remote_mic.managers.CameraManager
 import com.example.remote_mic.managers.ConnectionManager
 import kotlinx.coroutines.delay

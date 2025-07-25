@@ -9,12 +9,13 @@ import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.material3.*
+import androidx.compose.material3.MaterialTheme
 import androidx.core.content.ContextCompat
-import com.example.remote_mic.ui.RemoteMicApp
+import com.example.remote_mic.data.Command
 import com.example.remote_mic.managers.AudioManager
 import com.example.remote_mic.managers.CameraManager
 import com.example.remote_mic.managers.ConnectionManager
+import com.example.remote_mic.ui.RemoteMicApp
 
 class MainActivity : ComponentActivity() {
     private val TAG = "MainActivity"

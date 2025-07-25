@@ -64,7 +64,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.remote_mic.AppState
+import com.example.remote_mic.data.AppState
 import com.example.remote_mic.managers.AudioManager
 import com.example.remote_mic.managers.ConnectionManager
 import com.example.remote_mic.ui.components.UnifiedEnhancedStatusBar

@@ -1,4 +1,4 @@
-package com.example.remote_mic
+package com.example.remote_mic.data
 
 import kotlinx.serialization.Serializable
 import java.io.File

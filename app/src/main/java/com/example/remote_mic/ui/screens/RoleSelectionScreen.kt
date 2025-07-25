@@ -20,14 +20,10 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.tooling.preview.Devices
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import com.example.remote_mic.AppState
+import com.example.remote_mic.data.AppState
 import com.example.remote_mic.managers.ConnectionManager
 import com.example.remote_mic.ui.component.CleanStatusHeader
-import com.example.remote_mic.ui.theme.RemoteMicTheme
 
 import androidx.compose.foundation.clickable
 import androidx.compose.ui.draw.rotate
@@ -402,7 +398,7 @@ private fun String.capitalize(): String {
     return if (isEmpty()) this else this[0].uppercaseChar() + substring(1)
 }
 @Composable
-fun RoleSelectionScreen(onSelectRole: (String) -> Unit, appState: AppState,    connectionManager: ConnectionManager) {
+fun RoleSelectionScreen(onSelectRole: (String) -> Unit, appState: AppState, connectionManager: ConnectionManager) {
 
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
