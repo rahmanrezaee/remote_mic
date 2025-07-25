@@ -1,4 +1,4 @@
-name: Build and Release APKs
+name: Build and Release Multi-Architecture APKs
 
 on:
   push:
@@ -9,9 +9,6 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-
-    permissions:
-      contents: write  # Required for creating releases
 
     steps:
       - name: Checkout code
@@ -39,73 +36,67 @@ jobs:
       - name: Make gradlew executable
         run: chmod +x ./gradlew
 
-      - name: Build Release APKs
-        run: ./gradlew assembleRelease --stacktrace
-
-      - name: Build AAB
-        run: ./gradlew bundleRelease
-
-      - name: List generated files (Debug)
+      - name: Create keystore from secrets
         run: |
-          echo "=== APK Files ==="
-          find app/build/outputs/apk -name "*.apk" -type f
-          echo "=== AAB Files ==="
-          find app/build/outputs/bundle -name "*.aab" -type f
-          echo "=== Directory Structure ==="
-          ls -la app/build/outputs/apk/release/ || echo "Release directory not found"
+          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > key.jks
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
 
-      - name: Upload artifacts (for debugging)
-        uses: actions/upload-artifact@v3
-        with:
-          name: build-outputs
-          path: |
-            app/build/outputs/apk/**/*.apk
-            app/build/outputs/bundle/**/*.aab
+      - name: Build Release APKs
+        run: ./gradlew assembleRelease
+        env:
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+
+      - name: Build Release AAB
+        run: ./gradlew bundleRelease
+        env:
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
 
       - name: Get file sizes
         id: sizes
         run: |
-          # Check which files actually exist and get their sizes
-          if [ -f "app/build/outputs/apk/release/app-release.apk" ]; then
-            echo "universal_size=$(du -h app/build/outputs/apk/release/app-release.apk | cut -f1)" >> $GITHUB_OUTPUT
-            echo "Found universal APK"
-          fi
-          
-          if [ -f "app/build/outputs/apk/release/app-arm64-v8a-release.apk" ]; then
-            echo "arm64_size=$(du -h app/build/outputs/apk/release/app-arm64-v8a-release.apk | cut -f1)" >> $GITHUB_OUTPUT
-            echo "Found ARM64 APK"
-          fi
-          
-          if [ -f "app/build/outputs/bundle/release/app-release.aab" ]; then
-            echo "aab_size=$(du -h app/build/outputs/bundle/release/app-release.aab | cut -f1)" >> $GITHUB_OUTPUT
-            echo "Found AAB"
-          fi
+          echo "arm64_size=$(du -h app/build/outputs/apk/release/app-arm64-v8a-release.apk | cut -f1)" >> $GITHUB_OUTPUT
+          echo "arm_size=$(du -h app/build/outputs/apk/release/app-armeabi-v7a-release.apk | cut -f1)" >> $GITHUB_OUTPUT
+          echo "x86_size=$(du -h app/build/outputs/apk/release/app-x86-release.apk | cut -f1)" >> $GITHUB_OUTPUT
+          echo "universal_size=$(du -h app/build/outputs/apk/release/app-universal-release.apk | cut -f1)" >> $GITHUB_OUTPUT
+          echo "aab_size=$(du -h app/build/outputs/bundle/release/app-release.aab | cut -f1)" >> $GITHUB_OUTPUT
 
       - name: Create Release
         uses: softprops/action-gh-release@v1
         with:
           files: |
-            app/build/outputs/apk/release/*.apk
-            app/build/outputs/bundle/release/*.aab
+            app/build/outputs/apk/release/app-arm64-v8a-release.apk
+            app/build/outputs/apk/release/app-armeabi-v7a-release.apk
+            app/build/outputs/apk/release/app-x86-release.apk
+            app/build/outputs/apk/release/app-x86_64-release.apk
+            app/build/outputs/apk/release/app-universal-release.apk
+            app/build/outputs/bundle/release/app-release.aab
           body: |
             ## 🎉 Remote Mic ${{ github.ref_name }}
             
             Transform two phones into a synchronized recording system!
             
-            ### 📱 Download APK
+            ### 📱 Architecture-Specific Downloads (Optimized Size)
             
-            **Universal APK**: Works on all devices
-            - Size: ${{ steps.sizes.outputs.universal_size || 'Building...' }}
-            - [Download Universal APK](https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/app-release.apk)
+            | Architecture | Devices | Size | Download |
+            |:------------:|:-------:|:----:|:--------:|
+            | **ARM64** | Modern phones (2018+) | ${{ steps.sizes.outputs.arm64_size }} | [Download](https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/app-arm64-v8a-release.apk) |
+            | **ARM32** | Older Android devices | ${{ steps.sizes.outputs.arm_size }} | [Download](https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/app-armeabi-v7a-release.apk) |
+            | **x86** | Intel/AMD devices | ${{ steps.sizes.outputs.x86_size }} | [Download](https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/app-x86-release.apk) |
+            | **Universal** | All devices (fallback) | ${{ steps.sizes.outputs.universal_size }} | [Download](https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/app-universal-release.apk) |
             
             ### 📦 For Developers
-            - **Android App Bundle**: ${{ steps.sizes.outputs.aab_size || 'Building...' }}
-            - [Download AAB](https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/app-release.aab)
+            - **Android App Bundle** (.aab): ${{ steps.sizes.outputs.aab_size }} - [Download AAB](https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/app-release.aab)
             
             ### 🛠️ Installation
-            1. **Enable "Unknown Sources"** in Android Settings → Security
-            2. **Download** the APK file above
-            3. **Install** and grant required permissions
+            1. **Find your architecture**: Most modern phones use ARM64
+            2. **Download APK** for your device architecture  
+            3. **Enable "Unknown Sources"** in Android settings
+            4. **Install** and grant required permissions
             
             ### ✨ Features
             - 📱 P2P device connection
@@ -120,6 +111,6 @@ jobs:
             - Camera & microphone permissions
             - Storage permissions
           draft: false
-          prerelease: true
+          prerelease: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
