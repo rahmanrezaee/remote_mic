@@ -12,35 +12,6 @@ Transform two phones into a synchronized recording system - one as microphone, o
 
 ![Features Overview](images/feature.png)
 
-## 📥 Smart Download (Optimized Size)
-
-<div align="center">
-
-### 🤖 Auto-Detect & Download (Recommended)
-[![Smart Download](https://img.shields.io/badge/Smart%20Download-Auto%20Detect-brightgreen?style=for-the-badge&logo=android)](https://yourusername.github.io/remote-mic/)
-
-*Automatically detects your device and downloads the smallest APK (~15-25MB instead of 80MB)*
-
-### 📱 Manual Architecture Selection
-
-| Architecture | Devices | Size | Download |
-|:------------:|:-------:|:----:|:--------:|
-| **ARM64** 🚀 | Modern phones (2018+) | ~20MB | [![ARM64](https://img.shields.io/badge/ARM64-Download-success?style=flat-square&logo=android)](https://github.com/yourusername/remote-mic/releases/latest/download/app-arm64-v8a-release.apk) |
-| **ARM32** 📱 | Older Android devices | ~22MB | [![ARM32](https://img.shields.io/badge/ARM32-Download-success?style=flat-square&logo=android)](https://github.com/yourusername/remote-mic/releases/latest/download/app-armeabi-v7a-release.apk) |
-| **x86** 💻 | Intel/AMD devices | ~25MB | [![x86](https://img.shields.io/badge/x86-Download-success?style=flat-square&logo=intel)](https://github.com/yourusername/remote-mic/releases/latest/download/app-x86-release.apk) |
-| **Universal** 🌐 | All devices (fallback) | ~80MB | [![Universal](https://img.shields.io/badge/Universal-Download-orange?style=flat-square)](https://github.com/yourusername/remote-mic/releases/latest/download/app-universal-release.apk) |
-
-**💡 Don't know your architecture?** Most modern phones (2018+) use ARM64. Use Universal APK if unsure.
-
-### 🛠️ Installation Instructions
-
-1. **Download** the APK for your device architecture above
-2. **Enable "Unknown Sources"** in Android Settings → Security → Install unknown apps
-3. **Install** the downloaded APK file
-4. **Grant permissions** when prompted (Camera, Microphone, Storage)
-5. **Launch** Remote Mic and start recording!
-
-</div>
 
 ## ✨ Key Features
 
