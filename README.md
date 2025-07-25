@@ -2,9 +2,9 @@
 
 <div align="right">
 
-[![Latest Release](https://img.shields.io/github/v/release/yourusername/remote-mic?style=for-the-badge&logo=android&color=brightgreen)](https://github.com/yourusername/remote-mic/releases/latest)
-[![Downloads](https://img.shields.io/github/downloads/yourusername/remote-mic/total?style=for-the-badge&color=blue)](https://github.com/yourusername/remote-mic/releases)
-[![License](https://img.shields.io/github/license/yourusername/remote-mic?style=for-the-badge)](LICENSE)
+[![Latest Release](https://img.shields.io/github/v/release/rahmanrezaee/remote_mic?style=for-the-badge&logo=android&color=brightgreen)](https://github.com/rahmanrezaee/remote_mic/releases/latest)
+[![Downloads](https://img.shields.io/github/downloads/rahmanrezaee/remote_mic/total?style=for-the-badge&color=blue)](https://github.com/rahmanrezaee/remote_mic/releases)
+[![License](https://img.shields.io/github/license/rahmanrezaee/remote_mic?style=for-the-badge)](LICENSE)
 
 </div>
 
@@ -111,8 +111,8 @@ Transform two phones into a synchronized recording system - one as microphone, o
 ### Build Instructions
 ```bash
 # Clone repository
-git clone https://github.com/yourusername/remote-mic.git
-cd remote-mic
+git clone https://github.com/rahmanrezaee/remote_mic.git
+cd remote_mic
 
 # Build debug APKs (all architectures)
 ./gradlew assembleDebug
