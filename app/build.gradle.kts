@@ -22,28 +22,76 @@ android {
         }
     }
 
+    signingConfigs {
+        create("release") {
+            // These values should be stored in keystore.properties or environment variables
+            storeFile = file("key.jks")
+            storePassword = project.findProperty("KEYSTORE_PASSWORD") as String? ?: System.getenv("KEYSTORE_PASSWORD")
+            keyAlias = project.findProperty("KEY_ALIAS") as String? ?: System.getenv("KEY_ALIAS")
+            keyPassword = project.findProperty("KEY_PASSWORD") as String? ?: System.getenv("KEY_PASSWORD")
+        }
+    }
+
     buildTypes {
-        release {
+        debug {
+            isDebuggable = true
+            applicationIdSuffix = ".debug"
+            // Disable shrinking in debug for faster builds
             isMinifyEnabled = false
+        }
+        release {
+            // Enable all size optimizations
+            isMinifyEnabled = true
+            isShrinkResources = true
+            isDebuggable = false
+
+            // Use R8 full mode for maximum optimization
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+
+            signingConfig = signingConfigs.getByName("release")
+
+            // Additional optimizations
+            ndk {
+                debugSymbolLevel = "NONE"
+            }
         }
     }
+
+    bundle {
+        language {
+            // Split by language to reduce size
+            enableSplit = true
+        }
+        density {
+            // Split by screen density
+            enableSplit = true
+        }
+        abi {
+            // Split by CPU architecture
+            enableSplit = true
+        }
+    }
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_1_8
         targetCompatibility = JavaVersion.VERSION_1_8
     }
+
     kotlinOptions {
         jvmTarget = "1.8"
     }
+
     buildFeatures {
         compose = true
     }
+
     composeOptions {
         kotlinCompilerExtensionVersion = libs.versions.composeCompiler.get()
     }
+
     packaging {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
@@ -112,6 +160,8 @@ dependencies {
     implementation(libs.androidx.camera.video)
     implementation(libs.androidx.camera.view)
     implementation(libs.androidx.camera.extensions)
+
+    implementation(libs.androidx.fragment.ktx)
 
     // Testing dependencies
     testImplementation(libs.junit)
