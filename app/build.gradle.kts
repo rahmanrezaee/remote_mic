@@ -4,9 +4,22 @@ plugins {
     id("kotlinx-serialization")
 }
 
+
+tasks.register("buildSplitApks") {
+    group = "build"
+    description = "Build APKs for different architectures"
+    dependsOn("assembleRelease")
+
+    doLast {
+        println("✅ Built APKs for all architectures")
+    }
+}
+
+
 android {
     namespace = "com.example.remote_mic"
     compileSdk = 35
+
 
     defaultConfig {
         applicationId = "com.example.remote_mic"
