@@ -22,13 +22,18 @@ android {
         }
     }
 
-    signingConfigs {
-        create("release") {
-            // These values should be stored in keystore.properties or environment variables
-            storeFile = file("key.jks")
-            storePassword = project.findProperty("KEYSTORE_PASSWORD") as String? ?: System.getenv("KEYSTORE_PASSWORD")
-            keyAlias = project.findProperty("KEY_ALIAS") as String? ?: System.getenv("KEY_ALIAS")
-            keyPassword = project.findProperty("KEY_PASSWORD") as String? ?: System.getenv("KEY_PASSWORD")
+    // APK Splits Configuration (works for debug builds too)
+    splits {
+        abi {
+            isEnable = true
+            reset()
+            include("arm64-v8a", "armeabi-v7a", "x86", "x86_64")
+            isUniversalApk = true  // Generate universal APK for fallback
+        }
+        density {
+            isEnable = true
+            reset()
+            include("ldpi", "mdpi", "hdpi", "xhdpi", "xxhdpi", "xxxhdpi")
         }
     }
 
@@ -36,11 +41,11 @@ android {
         debug {
             isDebuggable = true
             applicationIdSuffix = ".debug"
-            // Disable shrinking in debug for faster builds
+            // Keep debug builds fast - no minification
             isMinifyEnabled = false
         }
         release {
-            // Enable all size optimizations
+            // Enable all size optimizations for release
             isMinifyEnabled = true
             isShrinkResources = true
             isDebuggable = false
@@ -51,15 +56,11 @@ android {
                 "proguard-rules.pro"
             )
 
-            signingConfig = signingConfigs.getByName("release")
-
-            // Additional optimizations
-            ndk {
-                debugSymbolLevel = "NONE"
-            }
+            // No signing config - will use debug key
         }
     }
 
+    // AAB Configuration
     bundle {
         language {
             // Split by language to reduce size
@@ -95,6 +96,16 @@ android {
     packaging {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
+            // Additional excludes for size optimization
+            excludes += "/META-INF/INDEX.LIST"
+            excludes += "/META-INF/DEPENDENCIES"
+            excludes += "/META-INF/LICENSE"
+            excludes += "/META-INF/LICENSE.txt"
+            excludes += "/META-INF/NOTICE"
+            excludes += "/META-INF/NOTICE.txt"
+            excludes += "/kotlin/**"
+            excludes += "/META-INF/*.kotlin_module"
+            excludes += "/META-INF/**/previous-compilation-data.bin"
         }
     }
 }
@@ -116,10 +127,8 @@ dependencies {
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.androidx.lifecycle.runtime.compose)
 
-
     // Material Icons Extended (contains all Material Design icons)
     implementation(libs.androidx.material.icons.extended)
-
 
     // Google Nearby Connections API (Core dependency for P2P)
     implementation(libs.play.services.nearby)
@@ -138,7 +147,6 @@ dependencies {
     implementation(libs.ffmpeg.kit.min.gpl)
     implementation(libs.smart.exception.java)
 
-
     implementation(libs.androidx.media3.exoplayer)
 
     // ExoPlayer UI components
@@ -151,7 +159,6 @@ dependencies {
     implementation(libs.androidx.media3.exoplayer.dash)
     implementation(libs.androidx.media3.exoplayer.hls)
     implementation(libs.androidx.media3.exoplayer.smoothstreaming)
-
 
     // Optional: Camera and Audio dependencies (uncomment when implementing media features)
     implementation(libs.androidx.camera.core)
@@ -173,4 +180,52 @@ dependencies {
     // Debug dependencies
     debugImplementation(libs.androidx.ui.tooling)
     debugImplementation(libs.androidx.ui.test.manifest)
+}
+
+// Custom tasks for building DEBUG APKs
+tasks.register("buildAllDebugApks") {
+    group = "build"
+    description = "Build all architecture-specific DEBUG APKs"
+    dependsOn("assembleDebug")
+
+    doLast {
+        println("✅ All DEBUG APKs built successfully:")
+        println("📱 ARM64: app/build/outputs/apk/debug/app-arm64-v8a-debug.apk")
+        println("📱 ARM32: app/build/outputs/apk/debug/app-armeabi-v7a-debug.apk")
+        println("💻 x86: app/build/outputs/apk/debug/app-x86-debug.apk")
+        println("💻 x86_64: app/build/outputs/apk/debug/app-x86_64-debug.apk")
+        println("🌐 Universal: app/build/outputs/apk/debug/app-universal-debug.apk")
+    }
+}
+
+tasks.register("printDebugApkSizes") {
+    group = "verification"
+    description = "Print sizes of all generated DEBUG APKs"
+
+    doLast {
+        val apkDir = File("app/build/outputs/apk/debug")
+        if (apkDir.exists()) {
+            apkDir.listFiles()?.filter { it.extension == "apk" }?.forEach { apk ->
+                val sizeInMB = apk.length() / (1024 * 1024)
+                println("📦 ${apk.name}: ${sizeInMB}MB")
+            }
+        } else {
+            println("❌ Debug APK directory not found. Run 'assembleDebug' first.")
+        }
+    }
+}
+
+tasks.register("buildAllReleaseApks") {
+    group = "build"
+    description = "Build all architecture-specific RELEASE APKs (debug-signed)"
+    dependsOn("assembleRelease")
+
+    doLast {
+        println("✅ All RELEASE APKs built successfully (debug-signed):")
+        println("📱 ARM64: app/build/outputs/apk/release/app-arm64-v8a-release.apk")
+        println("📱 ARM32: app/build/outputs/apk/release/app-armeabi-v7a-release.apk")
+        println("💻 x86: app/build/outputs/apk/release/app-x86-release.apk")
+        println("💻 x86_64: app/build/outputs/apk/release/app-x86_64-release.apk")
+        println("🌐 Universal: app/build/outputs/apk/release/app-universal-release.apk")
+    }
 }

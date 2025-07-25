@@ -1,18 +1,12 @@
-# Add project specific ProGuard rules here.
-# You can control the set of applied configuration files using the
-# proguardFiles setting in build.gradle.
+# Add this to your proguard-rules.pro
 
-# ================================================================================================
-# AGGRESSIVE SIZE OPTIMIZATION RULES
-# ================================================================================================
-
-# Enable more aggressive optimizations
+# Optimize for size
 -optimizations !code/simplification/arithmetic,!code/simplification/cast,!field/*,!class/merging/*
 -optimizationpasses 5
 -allowaccessmodification
 -dontpreverify
 
-# Remove logging in release builds
+# Remove logging in release
 -assumenosideeffects class android.util.Log {
     public static boolean isLoggable(java.lang.String, int);
     public static int v(...);
@@ -22,114 +16,56 @@
     public static int e(...);
 }
 
-# Remove debug and verbose logging from Kotlin
--assumenosideeffects class kotlin.jvm.internal.Intrinsics {
-    static void checkParameterIsNotNull(java.lang.Object, java.lang.String);
-}
+# Keep Nearby Connections
+-keep class com.google.android.gms.nearby.** { *; }
+-dontwarn com.google.android.gms.nearby.**
 
-# ================================================================================================
-# COMPOSE SPECIFIC OPTIMIZATIONS
-# ================================================================================================
-
-# Keep Compose classes that might be referenced dynamically
--keep class androidx.compose.** { *; }
--keep class androidx.compose.runtime.** { *; }
--keep class androidx.compose.ui.** { *; }
-
-# Allow R8 to optimize Compose
--keepclassmembers class androidx.compose.** {
-    *;
-}
-
-# ================================================================================================
-# KOTLIN SPECIFIC OPTIMIZATIONS
-# ================================================================================================
-
-# Keep Kotlin metadata for reflection
--keepattributes RuntimeVisibleAnnotations,RuntimeVisibleParameterAnnotations,RuntimeVisibleTypeAnnotations
-
-# Kotlin serialization
+# Keep Serialization classes
 -keepattributes *Annotation*, InnerClasses
 -dontnote kotlinx.serialization.AnnotationsKt
-
-# Keep Kotlin coroutines
--keep class kotlinx.coroutines.** { *; }
-
-# ================================================================================================
-# ANDROID SPECIFIC OPTIMIZATIONS
-# ================================================================================================
-
-# Keep native methods
--keepclasseswithmembernames class * {
-    native <methods>;
+-keepclassmembers class kotlinx.serialization.json.** {
+    *** Companion;
+}
+-keepclasseswithmembers class kotlinx.serialization.json.** {
+    kotlinx.serialization.KSerializer serializer(...);
+}
+-keep,includedescriptorclasses class com.example.remote_mic.**$$serializer { *; }
+-keepclassmembers class com.example.remote_mic.** {
+    *** Companion;
+}
+-keepclasseswithmembers class com.example.remote_mic.** {
+    kotlinx.serialization.KSerializer serializer(...);
 }
 
-# Keep custom views and their constructors
--keepclasseswithmembers class * {
-    public <init>(android.content.Context, android.util.AttributeSet);
-}
+# Keep Camera X
+-keep class androidx.camera.** { *; }
+-dontwarn androidx.camera.**
 
--keepclasseswithmembers class * {
-    public <init>(android.content.Context, android.util.AttributeSet, int);
-}
+# Keep MediaRecorder and Audio
+-keep class android.media.MediaRecorder { *; }
+-keep class android.media.AudioManager { *; }
 
-# Keep Activity subclasses
--keep public class * extends android.app.Activity
--keep public class * extends android.app.Application
--keep public class * extends android.app.Service
--keep public class * extends android.content.BroadcastReceiver
--keep public class * extends android.content.ContentProvider
+# Keep Compose
+-keep class androidx.compose.** { *; }
+-keep class kotlin.coroutines.** { *; }
 
-# ================================================================================================
-# MEDIA AND CAMERA OPTIMIZATIONS
-# ================================================================================================
+# Keep FFmpeg
+-keep class com.arthenica.ffmpegkit.** { *; }
+-keep class com.arthenica.smartexception.** { *; }
 
-# Keep ExoPlayer classes
+# Keep ExoPlayer
 -keep class com.google.android.exoplayer2.** { *; }
 -keep class androidx.media3.** { *; }
 
-# Keep Camera2 classes
--keep class androidx.camera.** { *; }
-
-# Keep FFmpeg classes
--keep class com.arthenica.ffmpegkit.** { *; }
-
-# ================================================================================================
-# NETWORKING AND SERIALIZATION
-# ================================================================================================
-
-# Keep Nearby Connections API
--keep class com.google.android.gms.nearby.** { *; }
-
-# Keep serialization classes
--keep @kotlinx.serialization.Serializable class * {
-    static **[] values();
-    static ** valueOf(java.lang.String);
-    *;
+# Remove Kotlin metadata to reduce size
+-assumenosideeffects class kotlin.jvm.internal.Intrinsics {
+    static void checkParameterIsNotNull(java.lang.Object, java.lang.String);
+    static void checkExpressionValueIsNotNull(java.lang.Object, java.lang.String);
+    static void checkNotNullExpressionValue(java.lang.Object, java.lang.String);
+    static void checkReturnedValueIsNotNull(java.lang.Object, java.lang.String, java.lang.String);
+    static void checkReturnedValueIsNotNull(java.lang.Object, java.lang.String);
+    static void checkFieldIsNotNull(java.lang.Object, java.lang.String, java.lang.String);
+    static void checkFieldIsNotNull(java.lang.Object, java.lang.String);
+    static void checkNotNull(java.lang.Object, java.lang.String);
+    static void checkNotNullParameter(java.lang.Object, java.lang.String);
 }
-
-# ================================================================================================
-# REFLECTION AND INTROSPECTION
-# ================================================================================================
-
-# Keep classes that use reflection
--keepattributes Signature,RuntimeVisibleAnnotations,AnnotationDefault
-
-# Keep enum classes
--keepclassmembers enum * {
-    public static **[] values();
-    public static ** valueOf(java.lang.String);
-}
-
-# ================================================================================================
-# DEBUGGING (Remove in production)
-# ================================================================================================
-
-# Uncomment these for debugging ProGuard issues
-# -printmapping mapping.txt
-# -printseeds seeds.txt
-# -printusage unused.txt
-
-# Remove source file names and line numbers for smaller size
--renamesourcefileattribute SourceFile
--keepattributes SourceFile,LineNumberTable
