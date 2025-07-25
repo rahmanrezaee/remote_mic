@@ -4,7 +4,12 @@ import android.content.Context
 import android.media.MediaRecorder
 import android.os.Build
 import android.util.Log
-import kotlinx.coroutines.*
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.io.File
 
 class AudioManager(private val context: Context) {
@@ -12,6 +17,10 @@ class AudioManager(private val context: Context) {
     private var mediaRecorder: MediaRecorder? = null
     private var isRecording = false
     private var currentAudioFile: File? = null
+
+    var onRecordingTimeChanged: ((String) -> Unit)? = null
+    private var recordingStartTime: Long = 0
+    private var timerJob: Job? = null
 
     var onAudioFileReady: ((File) -> Unit)? = null
     var onRecordingError: ((String) -> Unit)? = null
@@ -69,7 +78,11 @@ class AudioManager(private val context: Context) {
                 try {
                     prepare()
                     start()
+                    recordingStartTime = System.currentTimeMillis()
+                    startRecordingTimer()
                     isRecording = true
+
+
                     Log.d(TAG, "Audio recording started successfully")
                 } catch (e: Exception) {
                     Log.e(TAG, "Failed to start MediaRecorder", e)
@@ -84,13 +97,42 @@ class AudioManager(private val context: Context) {
             releaseMediaRecorder()
         }
     }
+    private fun startRecordingTimer() {
+        timerJob?.cancel()
+        timerJob = CoroutineScope(Dispatchers.Main).launch {
+            while (true) {
+                delay(1000) // Update every second
+                val currentTime = System.currentTimeMillis()
+                val elapsedTime = currentTime - recordingStartTime
+                val formattedTime = formatTime(elapsedTime)
+                onRecordingTimeChanged?.invoke(formattedTime)
+            }
+        }
+    }
 
+    private fun stopRecordingTimer() {
+        timerJob?.cancel()
+        timerJob = null
+    }
+
+    private fun formatTime(milliseconds: Long): String {
+        val seconds = (milliseconds / 1000) % 60
+        val minutes = (milliseconds / (1000 * 60)) % 60
+        val hours = (milliseconds / (1000 * 60 * 60))
+
+        return if (hours > 0) {
+            String.format("%02d:%02d:%02d", hours, minutes, seconds)
+        } else {
+            String.format("%02d:%02d", minutes, seconds)
+        }
+    }
     fun stopRecording() {
         if (!isRecording) {
             Log.w(TAG, "Not recording, ignoring stop request")
             return
         }
-
+        stopRecordingTimer()
+        onRecordingTimeChanged?.invoke("00:00")
         Log.d(TAG, "Stopping audio recording...")
 
         try {

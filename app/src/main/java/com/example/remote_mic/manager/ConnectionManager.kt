@@ -6,13 +6,32 @@ import android.util.Log
 import com.example.remote_mic.AppState
 import com.example.remote_mic.Command
 import com.google.android.gms.nearby.Nearby
-import com.google.android.gms.nearby.connection.*
-import kotlinx.coroutines.*
+import com.google.android.gms.nearby.connection.AdvertisingOptions
+import com.google.android.gms.nearby.connection.ConnectionInfo
+import com.google.android.gms.nearby.connection.ConnectionLifecycleCallback
+import com.google.android.gms.nearby.connection.ConnectionResolution
+import com.google.android.gms.nearby.connection.ConnectionsStatusCodes
+import com.google.android.gms.nearby.connection.DiscoveredEndpointInfo
+import com.google.android.gms.nearby.connection.DiscoveryOptions
+import com.google.android.gms.nearby.connection.EndpointDiscoveryCallback
+import com.google.android.gms.nearby.connection.Payload
+import com.google.android.gms.nearby.connection.PayloadCallback
+import com.google.android.gms.nearby.connection.PayloadTransferUpdate
+import com.google.android.gms.nearby.connection.Strategy
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
-import java.io.*
+import java.io.File
+import java.io.FileInputStream
+import java.io.FileOutputStream
+import java.io.IOException
 import java.nio.charset.StandardCharsets
 
 class ConnectionManager(private val context: Context) {
@@ -27,6 +46,29 @@ class ConnectionManager(private val context: Context) {
         val expectedSize: Long,
         val startTime: Long = System.currentTimeMillis()
     )
+
+
+    // Add this method to your ConnectionManager:
+    fun discardReceivedFile() {
+        val receivedFile = _state.value.receivedAudioFile
+        if (receivedFile != null && receivedFile.exists()) {
+            try {
+                receivedFile.delete()
+                Log.d(TAG, "Discarded received file: ${receivedFile.name}")
+            } catch (e: Exception) {
+                Log.w(TAG, "Failed to delete received file", e)
+            }
+        }
+
+        updateState {
+            copy(
+                receivedAudioFile = null,
+                transferProgress = "",
+                lastError = null
+            )
+        }
+    }
+
 
     private val pendingFiles = mutableMapOf<Long, FileTransfer>()
     private val coroutineScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
@@ -114,10 +156,61 @@ class ConnectionManager(private val context: Context) {
         }
     }
 
+    // Enhanced role selection with automatic assignment
     fun selectRole(role: String) {
         Log.d(TAG, "Role selected: $role")
-        updateState { copy(myRole = role, statusMessage = "You are: $role", lastError = null) }
-        sendCommand(Command("role", role))
+
+        // Determine the opposite role for the remote device
+        val oppositeRole = when (role) {
+            "camera" -> "mic"
+            "mic" -> "camera"
+            else -> ""
+        }
+
+        // Update local state immediately
+        updateState {
+            copy(
+                myRole = role,
+                remoteRole = oppositeRole,
+                statusMessage = "You are: $role",
+                lastError = null
+            )
+        }
+
+        // Send role assignment command to remote device
+        sendCommand(Command("role_assignment", "$role:$oppositeRole"))
+
+        Log.d(TAG, "Local role: $role, Remote role will be: $oppositeRole")
+    }
+
+    // New method for switching roles dynamically
+    fun switchRoles() {
+        val currentRole = _state.value.myRole
+        val newRole = when (currentRole) {
+            "camera" -> "mic"
+            "mic" -> "camera"
+            else -> return // Can't switch if no role is set
+        }
+
+        Log.d(TAG, "Switching roles from $currentRole to $newRole")
+
+        // Send role switch command to remote device
+        sendCommand(Command("role_switch", "$newRole:$currentRole"))
+
+        // Update local state
+        updateState {
+            copy(
+                myRole = newRole,
+                remoteRole = currentRole,
+                statusMessage = "Switched to: $newRole",
+                // Reset recording state when switching roles
+                isRecording = false,
+                // Clear role-specific files when switching
+                pendingAudioFile = if (newRole == "camera") null else pendingAudioFile,
+                receivedAudioFile = if (newRole == "mic") null else receivedAudioFile,
+                recordedVideoFile = if (newRole == "mic") null else recordedVideoFile
+            )
+        }
     }
 
     fun sendCommand(command: Command) {
@@ -308,6 +401,7 @@ class ConnectionManager(private val context: Context) {
                 copy(
                     isConnected = false,
                     myRole = "",
+                    remoteRole = "",
                     statusMessage = "Disconnected - Ready to reconnect",
                     isRecording = false,
                     isSendingFile = false,
@@ -554,8 +648,48 @@ class ConnectionManager(private val context: Context) {
         Log.d(TAG, "Command received: ${command.action} - ${command.data}")
 
         when (command.action) {
-            "role" -> {
-                updateState { copy(statusMessage = "Remote device is: ${command.data}") }
+            "role_assignment" -> {
+                // Handle initial role assignment from remote device
+                val roles = command.data.split(":")
+                if (roles.size == 2) {
+                    val remoteRole = roles[0]
+                    val myNewRole = roles[1]
+
+                    Log.d(TAG, "Received role assignment - Remote: $remoteRole, My new role: $myNewRole")
+                    updateState {
+                        copy(
+                            myRole = myNewRole,
+                            remoteRole = remoteRole,
+                            statusMessage = "You are now: $myNewRole",
+                            lastError = null
+                        )
+                    }
+                }
+            }
+
+            "role_switch" -> {
+                // Handle role switching from remote device
+                val roles = command.data.split(":")
+                if (roles.size == 2) {
+                    val remoteNewRole = roles[0]
+                    val myNewRole = roles[1]
+
+                    Log.d(TAG, "Received role switch - Remote switched to: $remoteNewRole, I am now: $myNewRole")
+                    updateState {
+                        copy(
+                            myRole = myNewRole,
+                            remoteRole = remoteNewRole,
+                            statusMessage = "Roles switched! You are now: $myNewRole",
+                            // Reset recording state when roles switch
+                            isRecording = false,
+                            // Clear role-specific files when switching
+                            pendingAudioFile = if (myNewRole == "camera") null else pendingAudioFile,
+                            receivedAudioFile = if (myNewRole == "mic") null else receivedAudioFile,
+                            recordedVideoFile = if (myNewRole == "mic") null else recordedVideoFile,
+                            lastError = null
+                        )
+                    }
+                }
             }
 
             "record" -> {
@@ -598,6 +732,7 @@ class ConnectionManager(private val context: Context) {
             copy(
                 isConnected = false,
                 myRole = "",
+                remoteRole = "",
                 statusMessage = "Disconnected - Ready to connect",
                 isRecording = false,
                 isSendingFile = false,

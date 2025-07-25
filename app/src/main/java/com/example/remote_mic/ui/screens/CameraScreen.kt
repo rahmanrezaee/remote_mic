@@ -1,17 +1,67 @@
 package com.example.remote_mic.ui.screens
 
+import androidx.camera.video.Quality
 import androidx.camera.view.PreviewView
-import androidx.compose.animation.core.*
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.*
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material.icons.filled.AudioFile
+import androidx.compose.material.icons.filled.Cameraswitch
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.FiberManualRecord
+import androidx.compose.material.icons.filled.FlashAuto
+import androidx.compose.material.icons.filled.FlashOff
+import androidx.compose.material.icons.filled.FlashOn
+import androidx.compose.material.icons.filled.HighQuality
+import androidx.compose.material.icons.filled.MergeType
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Stop
+import androidx.compose.material.icons.filled.SwapHoriz
+import androidx.compose.material.icons.filled.Timer
+import androidx.compose.material.icons.filled.Wifi
+import androidx.compose.material.icons.filled.WifiOff
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.scale
@@ -20,14 +70,19 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.viewinterop.AndroidView
-import androidx.camera.video.Quality
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.viewinterop.AndroidView
 import com.example.remote_mic.AppState
 import com.example.remote_mic.managers.CameraManager
 import com.example.remote_mic.managers.ConnectionManager
+import com.example.remote_mic.ui.components.UnifiedEnhancedStatusBar
+import com.example.remote_mic.utils.formatFileSize
 import kotlinx.coroutines.delay
+import java.io.File
+
+// Updated CameraScreen composable
 @Composable
 fun CameraScreen(
     isRecording: Boolean,
@@ -41,6 +96,17 @@ fun CameraScreen(
     var cameraStatus by remember { mutableStateOf("Initializing...") }
     var recordingTime by remember { mutableStateOf("00:00") }
     var showQualitySelector by remember { mutableStateOf(false) }
+    var showRoleSwitchDialog by remember { mutableStateOf(false) }
+// Add state for file received dialog
+    var showFileReceivedDialog by remember { mutableStateOf(false) }
+
+
+    LaunchedEffect(appState.receivedAudioFile) {
+        if (appState.receivedAudioFile != null && appState.myRole == "camera") {
+            showFileReceivedDialog = true
+        }
+    }
+
 
     // Check if we can show merge button
     val canShowMergeButton = appState.receivedAudioFile != null &&
@@ -103,17 +169,18 @@ fun CameraScreen(
             )
         }
 
-        // Enhanced Top Status Bar
-        EnhancedTopStatusBar(
+        // Enhanced Top Status Bar with Role Info
+        UnifiedEnhancedStatusBar(
+            appState = appState,
+            connectionManager = connectionManager,
             isRecording = isRecording,
-            cameraManager = cameraManager,
-            cameraStatus = cameraStatus,
             recordingTime = recordingTime,
-            isConnected = appState.isConnected,
-            onSettingsClick = { showQualitySelector = true },
-            modifier = Modifier.align(Alignment.TopCenter),
-            hasReceivedAudio = appState.receivedAudioFile != null
+            cameraManager = cameraManager,
+            modifier = Modifier.align(Alignment.TopCenter)
         )
+
+
+
 
         // Enhanced Recording Controls
         EnhancedRecordingControls(
@@ -121,9 +188,7 @@ fun CameraScreen(
             onStartRecording = onStartRecording,
             onStopRecording = onStopRecording,
             onCameraSwitch = { cameraManager.switchCamera() },
-            onMergeClick = if (canShowMergeButton) {
-                { connectionManager.updateState { copy(showMergeScreen = true) } }
-            } else null,
+            // Remove the merge button completely - no onMergeClick parameter
             canSwitchCamera = cameraManager.canSwitchCamera(),
             modifier = Modifier.align(Alignment.BottomCenter)
         )
@@ -132,10 +197,27 @@ fun CameraScreen(
         EnhancedSideControls(
             cameraManager = cameraManager,
             isRecording = isRecording,
+            appState = appState,
+            connectionManager = connectionManager,
             onQualityClick = { showQualitySelector = true },
             modifier = Modifier.align(Alignment.CenterEnd),
             recordingTime = recordingTime
         )
+
+//        // Role Switch Floating Button
+
+
+        // Role Switch Card (Alternative UI - uncomment to use instead of floating button)
+        /*
+        RoleSwitchCard(
+            appState = appState,
+            connectionManager = connectionManager,
+            modifier = Modifier
+                .align(Alignment.TopStart)
+                .padding(16.dp)
+                .offset(y = 80.dp)
+        )
+        */
 
         // Quality Selector Dialog
         if (showQualitySelector) {
@@ -148,28 +230,54 @@ fun CameraScreen(
                 onDismiss = { showQualitySelector = false }
             )
         }
+
+        // Role Switch Confirmation Dialog
+        if (showRoleSwitchDialog) {
+            RoleSwitchConfirmationDialog(
+                currentRole = appState.myRole,
+                onConfirm = {
+                    connectionManager.switchRoles()
+                    showRoleSwitchDialog = false
+                },
+                onDismiss = { showRoleSwitchDialog = false }
+            )
+        }
+
+        if (showFileReceivedDialog) {
+            FileReceivedDialog(
+                receivedFile = appState.receivedAudioFile,
+                onContinueEditing = {
+                    showFileReceivedDialog = false
+                    // Navigate to merge/editing screen
+                    connectionManager.updateState { copy(showMergeScreen = true) }
+                },
+                onDiscard = {
+                    showFileReceivedDialog = false
+                    // Clear the received file
+                    connectionManager.discardReceivedFile()
+                },
+                onDismiss = {
+                    showFileReceivedDialog = false
+                }
+            )
+        }
     }
 }
-
+// Updated EnhancedRecordingControls with Timer
 @Composable
 private fun EnhancedRecordingControls(
     isRecording: Boolean,
     onStartRecording: () -> Unit,
     onStopRecording: () -> Unit,
     onCameraSwitch: () -> Unit,
-    onMergeClick: (() -> Unit)? = null, // Nullable - only shows when merge is available
     canSwitchCamera: Boolean,
     modifier: Modifier = Modifier
 ) {
-    Card(
+    Box(
         modifier = modifier
             .fillMaxWidth()
-            .padding(20.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = Color.Black.copy(alpha = 0.7f)
-        ),
-        shape = RoundedCornerShape(32.dp),
-        elevation = CardDefaults.cardElevation(defaultElevation = 12.dp)
+            .padding(20.dp).background(color =  Color.Transparent)
+        ,
     ) {
         Row(
             modifier = Modifier
@@ -182,8 +290,8 @@ private fun EnhancedRecordingControls(
             EnhancedControlButton(
                 icon = Icons.Default.Cameraswitch,
                 size = 56.dp,
-                backgroundColor = Color.White.copy(alpha = if (canSwitchCamera) 0.2f else 0.1f),
-                iconColor = Color.White.copy(alpha = if (canSwitchCamera) 1f else 0.5f),
+                backgroundColor = Color.White.copy(alpha = if (canSwitchCamera && !isRecording) 0.2f else 0.1f),
+                iconColor = Color.White.copy(alpha = if (canSwitchCamera && !isRecording) 1f else 0.5f),
                 enabled = canSwitchCamera && !isRecording,
                 onClick = onCameraSwitch
             )
@@ -195,22 +303,354 @@ private fun EnhancedRecordingControls(
                 onStopRecording = onStopRecording
             )
 
-            // Merge button (when available) or placeholder
-            if (onMergeClick != null) {
-                // Show merge button when both files are available
-                MergeControlButton(
-                    onClick = onMergeClick,
-                    enabled = !isRecording
+            // Timer control (replaces merge button)
+            TimerControl(
+                onTimerSelected = { seconds ->
+                    if (seconds == 0) {
+                        onStartRecording() // Start immediately
+                    }
+                    // For other values, the countdown handles the delay
+                },
+                isRecording = isRecording
+            )
+        }
+    }
+}
+@Composable
+fun FileReceivedDialog(
+    receivedFile: File?,
+    onContinueEditing: () -> Unit,
+    onDiscard: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    if (receivedFile == null) return
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        icon = {
+            Icon(
+                imageVector = Icons.Default.AudioFile,
+                contentDescription = "Audio File Received",
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(32.dp)
+            )
+        },
+        title = {
+            Text(
+                text = "Audio File Received",
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.Bold,
+                textAlign = TextAlign.Center
+            )
+        },
+        text = {
+            Column(
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                // File info card
+                Card(
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant
+                    ),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.AudioFile,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Text(
+                                text = receivedFile.name,
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
+
+                        Text(
+                            text = "Size: ${formatFileSize(receivedFile.length())}",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+
+                        Text(
+                            text = "Received from microphone device",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                }
+
+                Text(
+                    text = "What would you like to do with this audio file?",
+                    style = MaterialTheme.typography.bodyMedium,
+                    textAlign = TextAlign.Center,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-            } else {
-                // Show disabled placeholder when merge not available
-                EnhancedControlButton(
-                    icon = Icons.Default.MergeType,
-                    size = 56.dp,
-                    backgroundColor = Color.White.copy(alpha = 0.1f),
-                    iconColor = Color.White.copy(alpha = 0.3f),
-                    enabled = false,
-                    onClick = { }
+
+                // Compact buttons in a row
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    // Discard button
+                    OutlinedButton(
+                        onClick = onDiscard,
+                        modifier = Modifier.weight(1f),
+                        colors = ButtonDefaults.outlinedButtonColors(
+                            contentColor = MaterialTheme.colorScheme.error
+                        ),
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.error),
+                        contentPadding = PaddingValues(vertical = 8.dp, horizontal = 12.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Delete,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = "Discard",
+                            style = MaterialTheme.typography.labelMedium
+                        )
+                    }
+
+                    // Continue Editing button
+                    Button(
+                        onClick = onContinueEditing,
+                        modifier = Modifier.weight(1f),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.primary
+                        ),
+                        contentPadding = PaddingValues(vertical = 8.dp, horizontal = 12.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Edit,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = "Edit",
+                            style = MaterialTheme.typography.labelMedium
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = {}, // Empty since buttons are in the text section
+        dismissButton = {} // Empty since buttons are in the text section
+    )
+}
+
+
+
+
+// Timer Control Component to replace merge button
+@Composable
+private fun TimerControl(
+    onTimerSelected: (Int) -> Unit,
+    isRecording: Boolean,
+    modifier: Modifier = Modifier
+) {
+    var showTimerOptions by remember { mutableStateOf(false) }
+    var selectedTimer by remember { mutableStateOf(0) } // 0 means no timer
+    var countdown by remember { mutableStateOf(0) }
+    var isCountingDown by remember { mutableStateOf(false) }
+
+    // Countdown effect
+    LaunchedEffect(isCountingDown, countdown) {
+        if (isCountingDown && countdown > 0) {
+            delay(1000)
+            countdown--
+        } else if (isCountingDown && countdown == 0) {
+            isCountingDown = false
+            onTimerSelected(0) // Trigger recording start
+        }
+    }
+
+    if (showTimerOptions) {
+        TimerSelectionDialog(
+            onTimerSelected = { seconds ->
+                selectedTimer = seconds
+                if (seconds > 0) {
+                    countdown = seconds
+                    isCountingDown = true
+                }
+                showTimerOptions = false
+            },
+            onDismiss = { showTimerOptions = false }
+        )
+    }
+
+    // Timer button
+    Box(
+        modifier = modifier.size(56.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        if (isCountingDown) {
+            // Show countdown
+            TimerCountdownDisplay(countdown = countdown)
+        } else {
+            // Show timer button
+            EnhancedControlButton(
+                icon = Icons.Default.Timer,
+                size = 56.dp,
+                backgroundColor = Color.White.copy(alpha = 0.2f),
+                iconColor = Color.White,
+                enabled = !isRecording,
+                onClick = { showTimerOptions = true }
+            )
+        }
+    }
+}
+
+@Composable
+private fun TimerCountdownDisplay(countdown: Int) {
+    val infiniteTransition = rememberInfiniteTransition(label = "countdown")
+    val scale by infiniteTransition.animateFloat(
+        initialValue = 1f,
+        targetValue = 1.2f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(500),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "scale"
+    )
+
+    Card(
+        modifier = Modifier
+            .size(56.dp)
+            .scale(scale),
+        colors = CardDefaults.cardColors(
+            containerColor = Color.Red.copy(alpha = 0.9f)
+        ),
+        shape = CircleShape
+    ) {
+        Box(
+            modifier = Modifier.fillMaxSize(),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = countdown.toString(),
+                style = MaterialTheme.typography.headlineMedium,
+                fontWeight = FontWeight.Bold,
+                color = Color.White
+            )
+        }
+    }
+}
+
+@Composable
+private fun TimerSelectionDialog(
+    onTimerSelected: (Int) -> Unit,
+    onDismiss: () -> Unit
+) {
+    val timerOptions = listOf(
+        0 to "No Timer",
+        1 to "1 Second",
+        3 to "3 Seconds",
+        5 to "5 Seconds",
+        10 to "10 Seconds"
+    )
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        icon = {
+            Icon(
+                imageVector = Icons.Default.Timer,
+                contentDescription = "Timer",
+                tint = MaterialTheme.colorScheme.primary
+            )
+        },
+        title = {
+            Text(
+                text = "Recording Timer",
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.Bold
+            )
+        },
+        text = {
+            Column(
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text(
+                    text = "Choose when to start recording:",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+
+                timerOptions.forEach { (seconds, label) ->
+                    TimerOption(
+                        seconds = seconds,
+                        label = label,
+                        onClick = { onTimerSelected(seconds) }
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel")
+            }
+        }
+    )
+}
+
+@Composable
+private fun TimerOption(
+    seconds: Int,
+    label: String,
+    onClick: () -> Unit
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onClick() },
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant
+        ),
+        shape = RoundedCornerShape(8.dp)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                imageVector = if (seconds == 0) Icons.Default.PlayArrow else Icons.Default.Timer,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(24.dp)
+            )
+
+            Text(
+                text = label,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Medium
+            )
+
+            Spacer(modifier = Modifier.weight(1f))
+
+            if (seconds > 0) {
+                Text(
+                    text = "${seconds}s",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.primary,
+                    fontWeight = FontWeight.Bold
                 )
             }
         }
@@ -291,7 +731,7 @@ private fun MergeControlButton(
     }
 }
 
-// Updated EnhancedTopStatusBar to show audio received indicator
+// Updated EnhancedTopStatusBar to show role information
 @Composable
 private fun EnhancedTopStatusBar(
     isRecording: Boolean,
@@ -301,7 +741,8 @@ private fun EnhancedTopStatusBar(
     modifier: Modifier = Modifier,
     cameraManager: CameraManager,
     recordingTime: String,
-    hasReceivedAudio: Boolean = false
+    hasReceivedAudio: Boolean = false,
+    appState: AppState
 ) {
     Card(
         modifier = modifier
@@ -313,81 +754,192 @@ private fun EnhancedTopStatusBar(
         shape = RoundedCornerShape(24.dp),
         elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
     ) {
-        Row(
+        Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(20.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            // Enhanced recording status
             Row(
-                horizontalArrangement = Arrangement.spacedBy(16.dp),
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Animated recording indicator
-                AnimatedRecordingDot(isRecording = isRecording)
+                // Enhanced recording status with role info
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(16.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    // Animated recording indicator
+                    AnimatedRecordingDot(isRecording = isRecording)
 
-                Column {
-                    Text(
-                        text = if (isRecording) "RECORDING" else "READY",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = Color.White
-                    )
-                    Text(
-                        text = cameraStatus,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = Color.White.copy(alpha = 0.8f)
-                    )
-                    // Show audio received indicator
-                    if (hasReceivedAudio) {
+                    Column {
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = if (isRecording) "RECORDING" else "READY",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = Color.White
+                            )
+
+                            // Role badge
+                            Card(
+                                colors = CardDefaults.cardColors(
+                                    containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.8f)
+                                ),
+                                shape = RoundedCornerShape(8.dp)
+                            ) {
+                                Text(
+                                    text = "📹 Camera",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color.White,
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                )
+                            }
+                        }
+
                         Text(
-                            text = "🎵 Audio received",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = Color.Green
+                            text = cameraStatus,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Color.White.copy(alpha = 0.8f)
                         )
+
+                        // Show audio received indicator
+                        if (hasReceivedAudio) {
+                            Text(
+                                text = "🎵 Audio received from ${appState.remoteRole}",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = Color.Green
+                            )
+                        }
                     }
                 }
-            }
 
-            // Show timer when recording in top right, otherwise show connection status
-            if (isRecording) {
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Timer,
-                        contentDescription = "Recording Timer",
-                        tint = Color.Red,
-                        modifier = Modifier.size(20.dp)
-                    )
-                    Text(
-                        text = recordingTime,
-                        style = MaterialTheme.typography.labelMedium,
-                        color = Color.Red,
-                        fontWeight = FontWeight.Bold
-                    )
-                }
-            } else {
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(
-                        imageVector = if (isConnected) Icons.Default.Wifi else Icons.Default.WifiOff,
-                        contentDescription = "Connection Status",
-                        tint = if (isConnected) Color.Green else Color.Red,
-                        modifier = Modifier.size(20.dp)
-                    )
+                // Show timer when recording in top right, otherwise show connection status
+                if (isRecording) {
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Timer,
+                            contentDescription = "Recording Timer",
+                            tint = Color.Red,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Text(
+                            text = recordingTime,
+                            style = MaterialTheme.typography.labelMedium,
+                            color = Color.Red,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                } else {
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = if (isConnected) Icons.Default.Wifi else Icons.Default.WifiOff,
+                            contentDescription = "Connection Status",
+                            tint = if (isConnected) Color.Green else Color.Red,
+                            modifier = Modifier.size(20.dp)
+                        )
+
+                        if (isConnected && appState.remoteRole.isNotEmpty()) {
+                            Text(
+                                text = "Connected to ${appState.remoteRole}",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = Color.Green
+                            )
+                        }
+                    }
                 }
             }
         }
     }
 }
 
+@Composable
+private fun RoleSwitchConfirmationDialog(
+    currentRole: String,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    val targetRole = if (currentRole == "camera") "microphone" else "camera"
 
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        icon = {
+            Icon(
+                imageVector = Icons.Default.SwapHoriz,
+                contentDescription = "Switch Roles",
+                tint = MaterialTheme.colorScheme.primary
+            )
+        },
+        title = {
+            Text(
+                text = "Switch Roles?",
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.Bold
+            )
+        },
+        text = {
+            Column(
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Text(
+                    text = "You are currently the $currentRole device.",
+                    style = MaterialTheme.typography.bodyMedium
+                )
+                Text(
+                    text = "Switching will make you the $targetRole and the remote device will become the $currentRole.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+
+                Card(
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant
+                    ),
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    Text(
+                        text = "⚠️ Any current recordings will be stopped.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(12.dp)
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = onConfirm,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.primary
+                )
+            ) {
+                Icon(
+                    imageVector = Icons.Default.SwapHoriz,
+                    contentDescription = null,
+                    modifier = Modifier.size(18.dp)
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("Switch to $targetRole")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel")
+            }
+        }
+    )
+}
 
 @Composable
 private fun MergeAvailableButton(
@@ -550,6 +1102,9 @@ private fun TimerDisplay(
 private fun EnhancedSideControls(
     cameraManager: CameraManager,
     recordingTime: String,
+    appState: AppState,
+
+    connectionManager: ConnectionManager,
     isRecording: Boolean,
     onQualityClick: () -> Unit,
     modifier: Modifier = Modifier
@@ -570,145 +1125,11 @@ private fun EnhancedSideControls(
 
 
 
+
     }
 }
 
-@Composable
-private fun EnhancedTopStatusBar(
-    isRecording: Boolean,
-    cameraStatus: String,
-    isConnected: Boolean,
-    onSettingsClick: () -> Unit,
-    modifier: Modifier = Modifier,
-    cameraManager: CameraManager,
-    recordingTime: String
-) {
-    Card(
-        modifier = modifier
-            .fillMaxWidth()
-            .padding(16.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = Color.Black.copy(alpha = 0.7f)
-        ),
-        shape = RoundedCornerShape(24.dp),
-        elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(20.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            // Enhanced recording status
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(16.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                // Animated recording indicator
-                AnimatedRecordingDot(isRecording = isRecording)
 
-                Column {
-                    Text(
-                        text = if (isRecording) "RECORDING" else "READY",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = Color.White
-                    )
-                    Text(
-                        text = cameraStatus,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = Color.White.copy(alpha = 0.8f)
-                    )
-                }
-            }
-
-            // Show timer when recording in top right, otherwise show connection status
-            if (isRecording) {
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Timer,
-                        contentDescription = "Recording Timer",
-                        tint = Color.Red,
-                        modifier = Modifier.size(20.dp)
-                    )
-                    Text(
-                        text = recordingTime,
-                        style = MaterialTheme.typography.labelMedium,
-                        color = Color.Red,
-                        fontWeight = FontWeight.Bold
-                    )
-                }
-            } else {
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(
-                        imageVector = if (isConnected) Icons.Default.Wifi else Icons.Default.WifiOff,
-                        contentDescription = "Connection Status",
-                        tint = if (isConnected) Color.Green else Color.Red,
-                        modifier = Modifier.size(20.dp)
-                    )
-
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun RecordingIndicator(
-    recordingTime: String,
-    modifier: Modifier = Modifier
-) {
-    val infiniteTransition = rememberInfiniteTransition(label = "recording_indicator")
-
-    val alpha by infiniteTransition.animateFloat(
-        initialValue = 0.3f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(800),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "indicatorAlpha"
-    )
-
-    Card(
-        modifier = modifier.padding(16.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = Color.Red.copy(alpha = alpha)
-        ),
-        shape = RoundedCornerShape(20.dp)
-    ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(8.dp)
-                    .background(Color.White, CircleShape)
-            )
-            Text(
-                text = "REC",
-                style = MaterialTheme.typography.labelSmall,
-                fontWeight = FontWeight.Bold,
-                color = Color.White
-            )
-            Text(
-                text = recordingTime,
-                style = MaterialTheme.typography.labelSmall,
-                fontWeight = FontWeight.Bold,
-                color = Color.White
-            )
-        }
-    }
-}
 
 @Composable
 private fun QualitySelector(
