@@ -19,10 +19,6 @@
         }
         h1 { color: #333; margin-bottom: 10px; font-size: 2.5em; }
         .subtitle { color: #666; margin-bottom: 30px; font-size: 1.1em; }
-        .detection {
-            background: #f8f9fa; padding: 20px; border-radius: 10px;
-            margin: 20px 0; border-left: 4px solid #007bff;
-        }
         .download-btn {
             background: linear-gradient(45deg, #28a745, #20c997);
             color: white; padding: 15px 30px; text-decoration: none;
@@ -30,121 +26,24 @@
             display: inline-block; margin: 10px; transition: transform 0.2s;
         }
         .download-btn:hover { transform: translateY(-2px); }
-        .alternative { margin-top: 30px; padding-top: 30px; border-top: 1px solid #eee; }
-        .arch-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 15px; margin: 20px 0; }
-        .arch-card {
-            background: #f8f9fa; padding: 20px; border-radius: 10px;
-            border: 2px solid transparent; transition: all 0.3s;
+        .info-text {
+            margin-top: 30px; color: #666; font-size: 14px;
         }
-        .arch-card:hover { border-color: #007bff; transform: translateY(-2px); }
-        .emoji { font-size: 2em; margin-bottom: 10px; }
-        .size { color: #28a745; font-weight: bold; }
     </style>
 </head>
 <body>
 <div class="container">
     <h1>📱 Remote Mic</h1>
-    <p class="subtitle">Smart APK Download - Optimized for Your Device</p>
+    <p class="subtitle">Download the latest version of Remote Mic APK</p>
 
-    <div id="detection" class="detection">
-        <h3>🔍 Detecting your device...</h3>
-        <p>Finding the perfect APK size for your architecture</p>
-    </div>
+    <a class="download-btn" href="https://github.com/yourusername/remote-mic/releases/download/v1.0.0/remote-mic-v1.0.0.apk">
+        🚀 Download Remote Mic APK
+    </a>
 
-    <div id="download" style="display:none;">
-        <h3>✅ Perfect Match Found!</h3>
-        <p>We found the optimal APK for your device:</p>
-        <a id="downloadLink" class="download-btn" href="#">
-            <span id="downloadText">Download APK</span>
-        </a>
-        <p id="sizeInfo" class="size"></p>
-    </div>
-
-    <div class="alternative">
-        <h3>📦 All Versions Available</h3>
-        <div class="arch-grid">
-            <div class="arch-card">
-                <div class="emoji">🚀</div>
-                <h4>ARM64</h4>
-                <p>Modern phones (2018+)</p>
-                <p class="size">~15-20MB</p>
-                <a href="https://github.com/yourusername/remote-mic/releases/latest/download/app-arm64-v8a-release.apk"
-                   class="download-btn" style="font-size: 14px; padding: 10px 20px;">Download</a>
-            </div>
-            <div class="arch-card">
-                <div class="emoji">📱</div>
-                <h4>ARM32</h4>
-                <p>Older Android devices</p>
-                <p class="size">~18-22MB</p>
-                <a href="https://github.com/yourusername/remote-mic/releases/latest/download/app-armeabi-v7a-release.apk"
-                   class="download-btn" style="font-size: 14px; padding: 10px 20px;">Download</a>
-            </div>
-            <div class="arch-card">
-                <div class="emoji">💻</div>
-                <h4>x86</h4>
-                <p>Intel/AMD devices</p>
-                <p class="size">~20-25MB</p>
-                <a href="https://github.com/yourusername/remote-mic/releases/latest/download/app-x86-release.apk"
-                   class="download-btn" style="font-size: 14px; padding: 10px 20px;">Download</a>
-            </div>
-            <div class="arch-card">
-                <div class="emoji">🌐</div>
-                <h4>Universal</h4>
-                <p>All devices (fallback)</p>
-                <p class="size">~80MB</p>
-                <a href="https://github.com/yourusername/remote-mic/releases/latest/download/app-universal-release.apk"
-                   class="download-btn" style="font-size: 14px; padding: 10px 20px;">Download</a>
-            </div>
-        </div>
-    </div>
-
-    <div style="margin-top: 30px; color: #666; font-size: 14px;">
-        <p>⚡ Architecture-specific APKs are 60-75% smaller than universal builds</p>
-        <p>🔒 All downloads are signed and verified</p>
+    <div class="info-text">
+        <p>Version: 1.0.0 • Universal APK • Size: ~25MB</p>
+        <p>🔒 Signed & Verified | 📦 Works on all Android devices</p>
     </div>
 </div>
-
-<script>
-    function detectArchitecture() {
-        const userAgent = navigator.userAgent.toLowerCase();
-        const platform = navigator.platform.toLowerCase();
-
-        let arch = 'Universal';
-        let size = '~80MB';
-        let filename = 'app-universal-release.apk';
-        let emoji = '🌐';
-
-        // More sophisticated detection
-        if (userAgent.includes('arm64') || userAgent.includes('aarch64') ||
-            (userAgent.includes('mobile') && !userAgent.includes('x86'))) {
-            arch = 'ARM64';
-            size = '~15-20MB';
-            filename = 'app-arm64-v8a-release.apk';
-            emoji = '🚀';
-        } else if (userAgent.includes('arm')) {
-            arch = 'ARM32';
-            size = '~18-22MB';
-            filename = 'app-armeabi-v7a-release.apk';
-            emoji = '📱';
-        } else if (platform.includes('x86')) {
-            arch = 'x86';
-            size = '~20-25MB';
-            filename = 'app-x86-release.apk';
-            emoji = '💻';
-        }
-
-        const baseUrl = 'https://github.com/yourusername/remote-mic/releases/latest/download/';
-
-        setTimeout(() => {
-            document.getElementById('detection').style.display = 'none';
-            document.getElementById('download').style.display = 'block';
-            document.getElementById('downloadLink').href = baseUrl + filename;
-            document.getElementById('downloadText').innerHTML = `${emoji} Download ${arch} APK`;
-            document.getElementById('sizeInfo').innerHTML = `Size: ${size} • Architecture: ${arch} • Optimized for your device`;
-        }, 2500);
-    }
-
-    detectArchitecture();
-</script>
 </body>
 </html>
